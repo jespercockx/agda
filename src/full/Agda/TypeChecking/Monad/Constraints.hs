@@ -136,9 +136,9 @@ class ( MonadTCEnv m
   -- | Add constraint as awake constraint.
   addAwakeConstraint :: Constraint -> m ()
 
-  -- | `catchPatternErr handle m` runs m, handling pattern violations
-  --    with `handle` (doesn't roll back the state)
-  catchPatternErr :: m a -> m a -> m a
+  -- | `catchTCBlocked m handle` runs m, handling blocked TC
+  --    computations with `handle` (doesn't roll back the state)
+  catchTCBlocked :: m a -> (Maybe [MetaId] -> m a) -> m a
 
   solveConstraint :: Constraint -> m ()
 
@@ -195,7 +195,7 @@ isSolvingConstraints = asksTC envSolvingConstraints
 
 -- | Add constraint if the action raises a pattern violation
 catchConstraint :: MonadConstraint m => Constraint -> m () -> m ()
-catchConstraint c = catchPatternErr $ addConstraint c
+catchConstraint c = catchTCBlocked $ \ _ -> addConstraint c -- TODO: remember blocking metas
 
 ---------------------------------------------------------------------------
 -- * Lenses

@@ -183,7 +183,7 @@ compareTerm cmp a u v = do
         [ "attempting shortcut"
         , nest 2 $ prettyTCM (MetaV x es) <+> ":=" <+> prettyTCM v
         ]
-      ifM (isInstantiatedMeta x) patternViolation {-else-} $ do
+      ifM (isInstantiatedMeta x) blockedOnUnknownMeta {-else-} $ do
         assignE dir x es v $ compareTermDir dir a
       reportSDoc "tc.conv.term.shortcut" 50 $
         "shortcut successful" $$ nest 2 ("result:" <+> (pretty =<< instantiate (MetaV x es)))
@@ -216,7 +216,7 @@ assignE dir x es v comp = assignWrapper dir x es v $ do
           comp w v
         Nothing ->  do
           reportSLn "tc.conv.assign" 30 "eta expansion did not instantiate meta"
-          patternViolation  -- nothing happened, give up
+          blockedOnMeta x  -- nothing happened, give up
 
 compareTermDir :: MonadConversion m => CompareDirection -> Type -> Term -> Term -> m ()
 compareTermDir dir a = dirToCmp (`compareTerm'` a) dir
@@ -398,14 +398,14 @@ computeElimHeadType f es es' = do
     -- Andreas, 2016-02-09, Issue 1825: The type of arg might be
     -- a meta-variable, e.g. in interactive development.
     -- In this case, we postpone.
-    fromMaybeM patternViolation $ getDefType f =<< reduce targ
+    ifBlockedType targ (\m _ -> blockOnMeta m) $ \_ t -> getDefType f t
 
 -- | Syntax directed equality on atomic values
 --
 compareAtom :: forall m. MonadConversion m => Comparison -> Type -> Term -> Term -> m ()
 compareAtom cmp t m n =
   verboseBracket "tc.conv.atom" 20 "compareAtom" $
-  -- if a PatternErr is thrown, rebuild constraint!
+  -- if comparison is blocked, rebuild constraint!
   (catchConstraint (ValueCmp cmp t m n) :: m () -> m ()) $ do
     reportSDoc "tc.conv.atom" 50 $
       "compareAtom" <+> fsep [ prettyTCM m <+> prettyTCM cmp
@@ -495,7 +495,9 @@ compareAtom cmp t m n =
                           l2 = ifM (isInstantiatedMeta x) (compareTermDir dir t m n) l1
                           r2 = ifM (isInstantiatedMeta y) (compareTermDir rid t n m) r1
 
-              catchPatternErr solve2 solve1
+              solve1 `catchTCBlocked` \mm1 ->
+                solve2 `catchTCBlocked` \mm2 ->
+                  blockOnMetas $ mm1 ++ mm2
 
       -- one side a meta, the other an unblocked term
       (NotBlocked _ (MetaV x es), _) -> assign dir x es n
@@ -624,7 +626,7 @@ compareAtom cmp t m n =
               return True
             _  -> return False
         -- Andreas, 2013-05-15 due to new postponement strategy, type can now be blocked
-        conType c t = ifBlocked t (\ _ _ -> patternViolation) $ \ _ t -> do
+        conType c t = ifBlocked t (\ m _ -> blockedOnMeta m) $ \ _ t -> do
           let impossible = do
                 reportSDoc "impossible" 10 $
                   "expected data/record type, found " <+> prettyTCM t
@@ -635,7 +637,7 @@ compareAtom cmp t m n =
                 -- In issue 921, this happens during the final attempt
                 -- to solve left-over constraints.
                 -- Thus, instead of crashing, just give up gracefully.
-                patternViolation
+                blockOnUnknownMeta
           maybe impossible (return . snd) =<< getFullyAppliedConType c t
         equalFun t1 t2 = case (t1, t2) of
           (Pi dom1 b1, Pi dom2 b2) -> do
@@ -731,17 +733,17 @@ antiUnify pid a u v = do
     -- It seems that nothing guarantees here that the constructors are fully
     -- applied!?  Thus, @a@ could be a function type and we need the robust
     -- @getConType@ here.
-    -- (Note that @patternViolation@ swallows exceptions coming from @getConType@
+    -- (Note that @blockOnUnknownMeta@ swallows exceptions coming from @getConType@
     -- thus, we would not see clearly if we used @getFullyAppliedConType@ instead.)
     (Con x ci us, Con y _ vs) | x == y -> maybeGiveUp $ do
-      a <- maybe patternViolation (return . snd) =<< getConType x a
+      a <- maybe blockOnUnknownMeta (return . snd) =<< getConType x a
       antiUnifyElims pid a (Con x ci []) us vs
     (Def f us, Def g vs) | f == g, length us == length vs -> maybeGiveUp $ do
       a <- computeElimHeadType f us vs
       antiUnifyElims pid a (Def f []) us vs
     _ -> fallback
   where
-    maybeGiveUp = catchPatternErr fallback
+    maybeGiveUp = `catchTCBlocked` (\_ -> fallback)
 
     fallback = blockTermOnProblem a u pid
 
@@ -754,14 +756,14 @@ antiUnifyElims pid a self (Proj o f : es1) (Proj _ g : es2) | f == g = do
   res <- projectTyped self a o f
   case res of
     Just (_, self, a) -> antiUnifyElims pid a self es1 es2
-    Nothing -> patternViolation -- can fail for projection like
+    Nothing -> blockOnUnknownMeta -- can fail for projection like
 antiUnifyElims pid a self (Apply u : es1) (Apply v : es2) = do
   case unEl a of
     Pi a b -> do
       w <- antiUnify pid (unDom a) (unArg u) (unArg v)
       antiUnifyElims pid (b `lazyAbsApp` w) (apply self [w <$ u]) es1 es2
-    _ -> patternViolation
-antiUnifyElims _ _ _ _ _ = patternViolation -- trigger maybeGiveUp in antiUnify
+    _ -> blockOnUnknownMeta
+antiUnifyElims _ _ _ _ _ = blockOnUnknownMeta -- trigger maybeGiveUp in antiUnify
 
 -- | @compareElims pols a v els1 els2@ performs type-directed equality on eliminator spines.
 --   @t@ is the type of the head @v@.
@@ -800,7 +802,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
       reportSDoc "tc.conv.elim" 25 $ "compareElims IApply"
        -- Andrea: copying stuff from the Apply case..
       let (pol, pols) = nextPolarity pols0
-      ifBlocked a (\ m t -> patternViolation) $ \ _ a -> do
+      ifBlocked a (\ m t -> blockedOnMeta m) $ \ _ a -> do
           va <- pathView a
           reportSDoc "tc.conv.elim.iapply" 60 $ "compareElims IApply" $$ do
             nest 2 $ "va =" <+> text (show (isPathType va))
@@ -818,7 +820,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
             -- because @etaContract@ can produce such terms
             OType t@(El _ Pi{}) -> compareElims pols0 fors0 t v (Apply (defaultArg r1) : els1) (Apply (defaultArg r2) : els2)
 
-            OType{} -> patternViolation
+            OType{} -> blockOnUnknownMeta
 
     (Apply arg1 : els1, Apply arg2 : els2) ->
       (verboseBracket "tc.conv.elim" 20 "compare Apply" :: m () -> m ()) $ do
@@ -837,7 +839,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
         ]
       let (pol, pols) = nextPolarity pols0
           (for, fors) = nextIsForced fors0
-      ifBlocked a (\ m t -> patternViolation) $ \ _ a -> do
+      ifBlocked a (\ m t -> blockedOnMeta m) $ \ _ a -> do
         reportSLn "tc.conv.elim" 90 $ "type is not blocked"
         case unEl a of
           (Pi (Dom{domInfo = info, unDom = b}) codom) -> do
@@ -898,7 +900,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
             reportSDoc "impossible" 10 $
               "unexpected type when comparing apply eliminations " <+> prettyTCM a
             reportSDoc "impossible" 50 $ "raw type:" <+> pretty a
-            patternViolation
+            blockOnUnknownMeta
             -- Andreas, 2013-10-22
             -- in case of disabled reductions (due to failing termination check)
             -- we might get stuck, so do not crash, but fail gently.
@@ -907,7 +909,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
     -- case: f == f' are projections
     (Proj o f : els1, Proj _ f' : els2)
       | f /= f'   -> typeError . GenericError . show =<< prettyTCM f <+> "/=" <+> prettyTCM f'
-      | otherwise -> ifBlocked a (\ m t -> patternViolation) $ \ _ a -> do
+      | otherwise -> ifBlocked a (\ m t -> blockedOnMeta m) $ \ _ a -> do
         res <- projectTyped v a o f -- fails only if f is proj.like but parameters cannot be retrieved
         case res of
           Just (_, u, t) -> do
@@ -922,7 +924,7 @@ compareElims pols0 fors0 a v els01 els02 = (catchConstraint (ElimCmp pols0 fors0
               , text   "applied to value " <+> prettyTCM v
               , text   "of unexpected type " <+> prettyTCM a
               ]
-            patternViolation
+            blockOnUnknownMeta
 
 
 -- | "Compare" two terms in irrelevant position.  This always succeeds.
@@ -1314,7 +1316,7 @@ leqLevel a b = do
       where
         ok       = return ()
         notok    = unlessM typeInType $ typeError $ NotLeqSort (Type a) (Type b)
-        postpone = patternViolation
+        postpone = blockOnMetas $ allMetas (as, bs)
 
         wrap m = catchError m $ \e ->
           case e of
@@ -1338,12 +1340,6 @@ leqLevel a b = do
 
         subtr m (ClosedLevel n) = ClosedLevel (n - m)
         subtr m (Plus n l)      = Plus (n - m) l
-
---     choice []     = patternViolation
---     choice (m:ms) = noConstraints m `catchError` \_ -> choice ms
---       case e of
---         PatternErr{} -> choice ms
---         _            -> throwError e
 
 equalLevel :: MonadConversion m => Level -> Level -> m ()
 equalLevel a b = do
@@ -1454,7 +1450,7 @@ equalLevel' a b = do
         notOk    = typeError $ UnequalSorts (Type a) (Type b)
         postpone = do
           reportSDoc "tc.conv.level" 30 $ hang "postponing:" 2 $ hang (pretty a <+> "==") 0 (pretty b)
-          patternViolation
+          blockOnMetas $ allMetas (as,bs)
 
         closed0 [] = [ClosedLevel 0]
         closed0 as = as
@@ -1752,7 +1748,7 @@ compareInterval cmp i t u = do
         if final then typeError $ UnequalTerms cmp t u i
                  else do
                    reportSDoc "tc.conv.interval" 15 $ "Giving up! }"
-                   patternViolation
+                   blockedOnUnknownMeta
  where
    blockedOrMeta Blocked{} = True
    blockedOrMeta (NotBlocked _ (MetaV{})) = True
@@ -1786,7 +1782,7 @@ leqConj (rs,rst) (qs,qst) = do
       -- we don't want to generate new constraints here because
       -- 1) in some situations the same constraint would get generated twice.
       -- 2) unless things are completely accepted we are going to
-      --    throw patternViolation in compareInterval.
+      --    throw a TCBlocked in compareInterval.
       let eqT t u = tryConversion (compareAtom CmpEq interval t u)
 
       let listSubset ts us = and <$> forM ts (\ t ->

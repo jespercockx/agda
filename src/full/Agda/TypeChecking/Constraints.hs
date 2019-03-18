@@ -37,7 +37,7 @@ import Agda.Utils.Pretty (prettyShow)
 import Agda.Utils.Impossible
 
 instance MonadConstraint TCM where
-  catchPatternErr = catchPatternErrTCM
+  catchTCBlocked = catchTCBlockedTCM
   addConstraint = addConstraintTCM
   addAwakeConstraint = addAwakeConstraint'
   solveConstraint = solveConstraintTCM
@@ -47,16 +47,12 @@ instance MonadConstraint TCM where
   modifyAwakeConstraints = modifyTC . mapAwakeConstraints
   modifySleepingConstraints = modifyTC . mapSleepingConstraints
 
-catchPatternErrTCM :: TCM a -> TCM a -> TCM a
-catchPatternErrTCM handle v =
+catchTCBlockedTCM :: TCM a -> (Maybe [MetaId] -> TCM a) -> TCM a
+catchTCBlockedTCM v handle =
      catchError_ v $ \err ->
      case err of
-          -- Not putting s (which should really be the what's already there) makes things go
-          -- a lot slower (+20% total time on standard library). How is that possible??
-          -- The problem is most likely that there are internal catchErrors which forgets the
-          -- state. catchError should preserve the state on pattern violations.
-         PatternErr{} -> handle
-         _            -> throwError err
+       TCBlocked mm -> handle mm
+       _            -> throwError err
 
 addConstraintTCM :: Constraint -> TCM ()
 addConstraintTCM c = do

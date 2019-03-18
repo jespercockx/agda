@@ -576,7 +576,7 @@ etaExpandBlocked (Blocked m t)  = do
 assignWrapper :: (MonadMetaSolver m, MonadConstraint m, MonadError TCErr m, MonadDebug m, HasOptions m)
               => CompareDirection -> MetaId -> Elims -> Term -> m () -> m ()
 assignWrapper dir x es v doAssign = do
-  ifNotM (asksTC envAssignMetas) patternViolation $ {- else -} do
+  ifNotM (asksTC envAssignMetas) (blockOnMeta x) $ {- else -} do
     reportSDoc "tc.meta.assign" 10 $ do
       "term" <+> prettyTCM (MetaV x es) <+> text (":" ++ show dir) <+> prettyTCM v
     nowSolvingConstraints doAssign `finally` solveAwakeConstraints
@@ -629,12 +629,12 @@ assign dir x args v = do
   -- We don't instantiate frozen mvars
   when (mvFrozen mvar == Frozen) $ do
     reportSLn "tc.meta.assign" 25 $ "aborting: meta is frozen!"
-    patternViolation
+    blockOnMeta x
 
   -- We never get blocked terms here anymore. TODO: we actually do. why?
   whenM (isBlockedTerm x) $ do
     reportSLn "tc.meta.assign" 25 $ "aborting: meta is a blocked term!"
-    patternViolation
+    blockOnMeta x
 
   -- Andreas, 2010-10-15 I want to see whether rhs is blocked
   reportSLn "tc.meta.assign" 50 $ "MetaVars.assign: I want to see whether rhs is blocked"
@@ -754,9 +754,10 @@ assign dir x args v = do
           -- we have a projected variable which could not be eta-expanded away:
           -- same as neutral
           Left ProjectedVar{} -> Just <$> attemptPruning x args fvs
+          Left (InvertBlocked m) -> blockOnMeta m
 
       case mids of
-        Nothing  -> patternViolation -- Ulf 2014-07-13: actually not needed after all: attemptInertRHSImprovement x args v
+        Nothing  -> blockOnMeta x
         Just ids -> do
           -- Check linearity
           ids <- do
@@ -785,108 +786,7 @@ assign dir x args v = do
         text $
           if killResult `elem` [PrunedSomething,PrunedEverything] then "succeeded"
            else "failed"
-      patternViolation
-
-{- UNUSED
--- | When faced with @_X us == D vs@ for an inert D we can solve this by
---   @_X xs := D _Ys@ with new constraints @_Yi us == vi@. This is important
---   for instance arguments, where knowing the head D might enable progress.
-attemptInertRHSImprovement :: MetaId -> Args -> Term -> TCM ()
-attemptInertRHSImprovement m args v = do
-  reportSDoc "tc.meta.inert" 30 $ vcat
-    [ "attempting inert rhs improvement"
-    , nest 2 $ sep [ prettyTCM (MetaV m $ map Apply args) <+> "=="
-                   , prettyTCM v ] ]
-  -- Check that the right-hand side has the form D vs, for some inert constant D.
-  -- Returns the type of D and a function to build an application of D.
-  (a, mkRHS) <- ensureInert v
-  -- Check that all arguments to the meta are neutral and does not have head D.
-  -- If there are non-neutral arguments there could be solutions to the meta
-  -- that computes over these arguments. If D is an argument to the meta we get
-  -- multiple solutions (for instance: _M Nat == Nat can be solved by both
-  -- _M := \ x -> x and _M := \ x -> Nat).
-  mapM_ (ensureNeutral (mkRHS []) . unArg) args
-  tel <- theTel <$> (telView =<< getMetaType m)
-  -- When attempting shortcut meta solutions, metas aren't necessarily fully
-  -- eta expanded. If this is the case we skip inert improvement.
-  when (length args < size tel) $ do
-    reportSDoc "tc.meta.inert" 30 $ "not fully applied"
-    patternViolation
-  -- Solve the meta with _M := \ xs -> D (_Y1 xs) .. (_Yn xs), for fresh metas
-  -- _Yi.
-  metaArgs <- inTopContext $ addContext tel $ newArgsMeta a
-  let varArgs = map Apply $ reverse $ zipWith (\i a -> var i <$ a) [0..] (reverse args)
-      sol     = mkRHS metaArgs
-      argTel  = map ("x" <$) args
-  reportSDoc "tc.meta.inert" 30 $ nest 2 $ vcat
-    [ "a       =" <+> prettyTCM a
-    , "tel     =" <+> prettyTCM tel
-    , "metas   =" <+> prettyList (map prettyTCM metaArgs)
-    , "sol     =" <+> prettyTCM sol
-    ]
-  assignTerm m argTel sol
-  patternViolation  -- throwing a pattern violation here lets the constraint
-                    -- machinery worry about restarting the comparison.
-  where
-    ensureInert :: Term -> TCM (Type, Args -> Term)
-    ensureInert v = do
-      let notInert = do
-            reportSDoc "tc.meta.inert" 30 $ nest 2 $ "not inert:" <+> prettyTCM v
-            patternViolation
-          toArgs elims =
-            case allApplyElims elims of
-              Nothing -> do
-                reportSDoc "tc.meta.inert" 30 $ nest 2 $ "can't do projections from inert"
-                patternViolation
-              Just args -> return args
-      case v of
-        Var x elims -> (, Var x . map Apply) <$> typeOfBV x
-        Con c ci args  -> notInert -- (, Con c ci) <$> defType <$> getConstInfo (conName c)
-        Def f elims -> do
-          def <- getConstInfo f
-          let good = return (defType def, Def f . map Apply)
-          case theDef def of
-            Axiom{}       -> good
-            Datatype{}    -> good
-            Record{}      -> good
-            Function{}    -> notInert
-            Primitive{}   -> notInert
-            Constructor{} -> __IMPOSSIBLE__
-
-        Pi{}       -> notInert -- this is actually inert but improving doesn't buy us anything for Pi
-        Lam{}      -> notInert
-        Sort{}     -> notInert
-        Lit{}      -> notInert
-        Level{}    -> notInert
-        MetaV{}    -> notInert
-        DontCare{} -> notInert
-
-    ensureNeutral :: Term -> Term -> TCM ()
-    ensureNeutral rhs v = do
-      b <- reduceB v
-      let notNeutral v = do
-            reportSDoc "tc.meta.inert" 30 $ nest 2 $ "not neutral:" <+> prettyTCM v
-            patternViolation
-          checkRHS arg
-            | arg == rhs = do
-              reportSDoc "tc.meta.inert" 30 $ nest 2 $ "argument shares head with RHS:" <+> prettyTCM arg
-              patternViolation
-            | otherwise  = return ()
-      case b of
-        Blocked{}      -> notNeutral v
-        NotBlocked r v ->                      -- Andrea(s) 2014-12-06 can r be useful?
-          case v of
-            Var x _    -> checkRHS (Var x [])
-            Def f _    -> checkRHS (Def f [])
-            Pi{}       -> return ()
-            Sort{}     -> return ()
-            Level{}    -> return ()
-            Lit{}      -> notNeutral v
-            DontCare{} -> notNeutral v
-            MetaV{}    -> notNeutral v
-            Con{}      -> notNeutral v
-            Lam{}      -> notNeutral v
--- END UNUSED -}
+      blockOnMeta x
 
 -- | @assignMeta m x t ids u@ solves @x ids = u@ for meta @x@ of type @t@,
 --   where term @u@ lives in a context of length @m@.
@@ -945,7 +845,7 @@ assignMeta' m x t n ids v = do
     -- types for the arguments, it might be blocked by a meta;
     -- then we give up. (Issue 903)
     when (size tel' < n)
-       patternViolation -- WAS: __IMPOSSIBLE__
+       blockOnUnknownMeta -- WAS: __IMPOSSIBLE__
 
     -- Perform the assignment (and wake constraints).
 
@@ -1164,7 +1064,6 @@ etaExpandProjectedVar mvar x t n qs = inTopContext $ do
     _ -> __IMPOSSIBLE__
 -}
 
-type FVs = VarSet
 type SubstCand = [(Int,Term)] -- ^ a possibly non-deterministic substitution
 
 -- | Turn non-det substitution into proper substitution, if possible.
@@ -1193,6 +1092,7 @@ data InvertExcept
   = CantInvert                -- ^ Cannot recover.
   | NeutralArg                -- ^ A potentially neutral arg: can't invert, but can try pruning.
   | ProjectedVar Int [(ProjOrigin, QName)]  -- ^ Try to eta-expand var to remove projs.
+  | InvertBlocked MetaId      -- ^ Could make progress once meta is instantiated.
 
 -- | Check that arguments @args@ to a metavar are in pattern fragment.
 --   Assumes all arguments already in whnf and eta-reduced.
@@ -1216,6 +1116,7 @@ inverseSubst args = map (mapFst unArg) <$> loop (zip args terms)
         , "  aborting assignment" ]
       throwError CantInvert
     neutralArg = throwError NeutralArg
+    block m = throwError $ InvertBlocked m
 
     isVarOrIrrelevant :: Res -> (Arg Term, Term) -> ExceptT InvertExcept TCM Res
     isVarOrIrrelevant vars (arg, t) =
@@ -1268,7 +1169,7 @@ inverseSubst args = map (mapFst unArg) <$> loop (zip args terms)
         Arg _ Def{}      -> neutralArg  -- Note that this Def{} is in normal form and might be prunable.
         Arg _ Lam{}      -> failure
         Arg _ Lit{}      -> failure
-        Arg _ MetaV{}    -> failure
+        Arg _ (MetaV m)  -> block m
         Arg _ Pi{}       -> neutralArg
         Arg _ Sort{}     -> neutralArg
         Arg _ Level{}    -> neutralArg

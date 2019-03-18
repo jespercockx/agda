@@ -194,11 +194,8 @@ give force ii mr e = liftTCM $ do
   -- Try to give mi := e
   do setMetaOccursCheck mi DontRunMetaOccursCheck -- #589, #2710: Allow giving recursive solutions.
      giveExpr force (Just ii) mi e
-    `catchError` \ case
-      -- Turn PatternErr into proper error:
-      PatternErr -> typeError . GenericDocError =<< do
+    `catchTCBlocked` \ _ -> typeError . GenericDocError =<< do
         withInteractionId ii $ "Failed to give" TP.<+> prettyTCM e
-      err -> throwError err
   removeInteractionPoint ii
   return e
 

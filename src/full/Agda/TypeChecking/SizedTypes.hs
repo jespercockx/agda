@@ -77,7 +77,7 @@ checkSizeLtSat t = whenM haveSizeLt $ do
                   "Possibly empty type of sizes " <+> prettyTCM t
 
 -- | Precondition: Term is reduced and not blocked.
---   Throws a 'patternViolation' if undecided
+--   Throws a 'TCBlocked' if undecided
 checkSizeNeverZero :: Term -> TCM Bool
 checkSizeNeverZero u = do
   v <- sizeView u
@@ -126,7 +126,7 @@ checkSizeNeverZero u = do
 -- | Checks that a size variable is ensured to be @> 0@.
 --   E.g. variable @i@ cannot be zero in context
 --   @(i : Size) (j : Size< ↑ ↑ i) (k : Size< j) (k' : Size< k)@.
---   Throws a 'patternViolation' if undecided.
+--   Throws a 'TCBlocked' if undecided.
 checkSizeVarNeverZero :: Int -> TCM Bool
 checkSizeVarNeverZero i = do
   reportSDoc "tc.size" 20 $ "checkSizeVarNeverZero" <+> prettyTCM (var i)
@@ -138,7 +138,7 @@ checkSizeVarNeverZero i = do
   -- say ``no'' for sure.
   (n, Any meta) <- runWriterT $ minSizeValAux ts $ repeat 0
   if n > 0 then return True else
-    if meta then patternViolation else return False
+    if meta then blockedOnUnknownMeta else return False
   where
   -- Compute the least valuation for size context ts above the
   -- given valuation and return its last value.
@@ -542,14 +542,12 @@ oldComputeSizeConstraint c =
         (a, n) <- oldSizeExpr u
         (b, m) <- oldSizeExpr v
         return $ Just $ Leq a (m - n) b
-      `catchError` \ err -> case err of
-        PatternErr{} -> return Nothing
-        _            -> throwError err
+      `catchTCBlocked` \ _ -> return Nothing
     _ -> __IMPOSSIBLE__
 
 -- | Turn a term with de Bruijn indices into a size expression with offset.
 --
---   Throws a 'patternViolation' if the term isn't a proper size expression.
+--   Throws a 'TCBlocked' if the term isn't a proper size expression.
 oldSizeExpr :: (MonadReduce m, MonadDebug m, MonadError TCErr m, HasBuiltins m)
             => Term -> m (OldSizeExpr, Int)
 oldSizeExpr u = do
@@ -558,13 +556,13 @@ oldSizeExpr u = do
   reportSDoc "tc.conv.size" 60 $ "oldSizeExpr:" <+> prettyTCM u
   s <- sizeView u
   case s of
-    SizeInf     -> patternViolation
+    SizeInf     -> blockedOnUnknownMeta
     SizeSuc u   -> mapSnd (+1) <$> oldSizeExpr u
     OtherSize u -> case u of
       Var i []  -> return (Rigid i, 0)
       MetaV m es | Just xs <- mapM isVar es, fastDistinct xs
                 -> return (SizeMeta m xs, 0)
-      _ -> patternViolation
+      _ -> blockedOnUnknownMeta
   where
     isVar (Proj{})  = Nothing
     isVar (IApply _ _ v) = isVar (Apply (defaultArg v))

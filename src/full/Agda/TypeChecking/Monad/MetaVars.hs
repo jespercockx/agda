@@ -85,10 +85,10 @@ class ( MonadConstraint m
   --   First check that metavar args are in pattern fragment.
   --     Then do extended occurs check on given thing.
   --
-  --   Assignment is aborted by throwing a @PatternErr@ via a call to
-  --   @patternViolation@.  This error is caught by @catchConstraint@
-  --   during equality checking (@compareAtom@) and leads to
-  --   restoration of the original constraints.
+  --   Assignment is aborted by calling @blockedOnMeta@.  This error
+  --   is caught by @catchConstraint@ during equality checking
+  --   (@compareAtom@) and leads to restoration of the original
+  --   constraints.
   assignV :: CompareDirection -> MetaId -> Args -> Term -> m ()
 
   -- | Directly instantiate the metavariable. Skip pattern check,

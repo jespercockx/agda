@@ -99,7 +99,7 @@ tcErrString err = show (getRange err) ++ " " ++ case err of
   TypeError _ cl    -> errorString $ clValue cl
   Exception r s     -> show r ++ " " ++ show s
   IOException _ r e -> show r ++ " " ++ show e
-  PatternErr{}      -> "PatternErr"
+  TCBlocked{}       -> "TCBlocked"
 
 stringTCErr :: String -> TCErr
 stringTCErr = Exception noRange . P.text
@@ -261,7 +261,7 @@ instance PrettyTCM TCErr where
       sayWhen (envRange $ clEnv e) (envCall $ clEnv e) $ prettyTCM e
     Exception r s     -> sayWhere r $ return s
     IOException _ r e -> sayWhere r $ fwords $ show e
-    PatternErr{}      -> sayWhere err $ panic "uncaught pattern violation"
+    TCBlocked{}       -> __IMPOSSIBLE__
 
 -- | Drops given amount of leading components of the qualified name.
 dropTopLevelModule' :: Int -> QName -> QName

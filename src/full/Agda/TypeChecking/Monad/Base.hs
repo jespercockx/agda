@@ -3299,10 +3299,12 @@ data TCErr
   | IOException TCState Range E.IOException
     -- ^ The first argument is the state in which the error was
     -- raised.
-  | PatternErr
-      -- ^ The exception which is usually caught.
-      --   Raised for pattern violations during unification ('assignV')
-      --   but also in other situations where we want to backtrack.
+  | TCBlocked (Maybe [MetaId])
+      -- ^ The exception which is usually caught. Contains `Just` the
+      --   list of metas that are blocking the TC computation, or
+      --   `Nothing` if the metas are unknown. Raised for pattern
+      --   violations during unification ('assignV') but also in other
+      --   situations where we want to backtrack.
 
 instance Error TCErr where
   strMsg = Exception noRange . text . strMsg
@@ -3311,13 +3313,15 @@ instance Show TCErr where
   show (TypeError _ e)     = show (envRange $ clEnv e) ++ ": " ++ show (clValue e)
   show (Exception r d)     = show r ++ ": " ++ render d
   show (IOException _ r e) = show r ++ ": " ++ show e
-  show PatternErr{}        = "Pattern violation (you shouldn't see this)"
+  show (TCBlocked mm)      = "Type checking blocked" ++ blk ++ " (you shouldn't see this)"
+    where
+      blk = caseMaybe mm "" $ \ms -> "on meta variable(s) " ++ show ms
 
 instance HasRange TCErr where
   getRange (TypeError _ cl)    = envRange $ clEnv cl
   getRange (Exception r _)     = r
   getRange (IOException s r _) = r
-  getRange PatternErr{}        = noRange
+  getRange TCBlocked{}         = noRange
 
 instance E.Exception TCErr
 
@@ -3740,10 +3744,10 @@ instance MonadError TCErr (TCMT IO) where
     oldState <- liftIO (readIORef r)
     unTCM m r e `E.catch` \err -> do
       -- Reset the state, but do not forget changes to the persistent
-      -- component. Not for pattern violations.
+      -- component. Not for blocked computations.
       case err of
-        PatternErr -> return ()
-        _          ->
+        TCBlocked{} -> return ()
+        _           ->
           liftIO $ do
             newState <- readIORef r
             writeIORef r $ oldState { stPersistentState = stPersistentState newState }
@@ -3840,8 +3844,11 @@ instance Null (TCM Doc) where
   empty = return empty
   null = __IMPOSSIBLE__
 
-patternViolation :: MonadError TCErr m => m a
-patternViolation = throwError PatternErr
+blockOnMeta :: MonadError TCErr m => MetaId -> m a
+blockOnMeta m = throwErr $ BlockedOnMeta (Just m)
+
+blockOnUnknownMeta :: MonadError TCErr m => m a
+blockOnUnknownMeta = throwError $ BlockedOnMeta Nothing
 
 internalError :: MonadTCM tcm => String -> tcm a
 internalError s = liftTCM $ typeError $ InternalError s

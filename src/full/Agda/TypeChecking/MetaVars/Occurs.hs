@@ -205,6 +205,17 @@ unfold v = asks (occUnfold . feExtra) >>= \case
   NoUnfold  -> instantiate v
   YesUnfold -> reduce v
 
+blockOnUnknownMeta' :: Int -> String -> MetaId -> TCM a
+blockOnUnknownMeta' n err = do
+  reportSLn "tc.meta.occurs" n err
+  blockOnUnknownMeta
+
+abort :: OccursCtx -> TypeError -> TCM a
+abort StronglyRigid err = typeError err -- here, throw an uncatchable error (unsolvable constraint)
+abort Flex          err = blockOnUnknownMeta' 70 (show err) -- throws a TCBlocked, which leads to delayed constraint
+abort Rigid         err = blockOnUnknownMeta' 70 (show err)
+abort Irrel         err = blockOnUnknownMeta' 70 (show err)
+
 -- ** Managing rigidiy during occurs check.
 
 -- | Leave the strongly rigid position.
@@ -340,7 +351,9 @@ instance Occurs Term where
               reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "(after singleton test)"
               case isST of
                 -- cannot decide, blocked by meta-var
-                Left mid -> patternViolation' 70 $ "Disallowed var " ++ show i ++ " not obviously singleton"
+                Left mid -> do
+                  reportSLn "tc.meta.occ" 70 $ "Disallowed var " ++ show i ++ " not obviously singleton"
+                  blockOnMeta mid
                 -- not a singleton type
                 Right Nothing -> -- abort Rigid turns this error into PatternErr
                   strongly $ abort $ MetaCannotDependOn m i
@@ -376,13 +389,14 @@ instance Occurs Term where
               -- I guess the error was there from times when occurrence check
               -- was done after the "lhs=linear variables" check, but now
               -- occurrence check comes first.
-              -- WAS:
-              -- when (m == m') $ if ctx == Top then patternViolation else
-              --   abort ctx $ MetaOccursInItself m'
-              when (m == m') $ patternViolation' 50 $ "occursCheck failed: Found " ++ prettyShow m
+              when (m == m') $ do
+                reportSLn "tc.meta.occurs" 50 $ "occursCheck failed: Found " ++ prettyShow m
+                blockOnMeta m
 
               -- The arguments of a meta are in a flexible position
-              (MetaV m' <$> do flexibly $ occurs es) `catchError` \ err -> do
+
+              (MetaV m' <$> do flexibily $ occurs es) `catchTCBlocked` \mm -> do
+                let err = TCBlocked $ fmap (m':) mm
                 ctx <- ask
                 reportSDoc "tc.meta.kill" 25 $ vcat
                   [ text $ "error during flexible occurs check, we are " ++ show (ctx ^. lensFlexRig)
@@ -391,7 +405,7 @@ instance Occurs Term where
                 case err of
                   -- On pattern violations try to remove offending
                   -- flexible occurrences (if not already in a flexible context)
-                  PatternErr{} | not (isFlexible ctx) -> do
+                if | not (isFlexible ctx) -> do
                     reportSLn "tc.meta.kill" 20 $
                       "oops, pattern violation for " ++ prettyShow m'
                     -- Andreas, 2014-03-02, see issue 1070:
@@ -402,7 +416,7 @@ instance Occurs Term where
                         -- after successful pruning, restart occurs check
                         then occurs =<< instantiate (MetaV m' es)
                         else throwError err
-                  _ -> throwError err
+                   | otherwise -> throwError err
           where
             -- a data or record type constructor propagates strong occurrences
             -- since e.g. x = List x is unsolvable
@@ -426,8 +440,11 @@ instance Occurs Term where
       Con c _ vs -> metaOccurs m vs
       Pi a b     -> metaOccurs m (a,b)
       Sort s     -> metaOccurs m s
-      MetaV m' vs | m == m' -> patternViolation' 50 $ "Found occurrence of " ++ prettyShow m
-                  | otherwise -> metaOccurs m vs
+      MetaV m' vs
+        | m == m' -> do
+            reportSLn "tc.meta.occurs" 50 $ "Found occurrence of " ++ prettyShow m
+            blockOnMeta m
+        | otherwise -> metaOccurs m vs
 
 instance Occurs QName where
   occurs d = __IMPOSSIBLE__
