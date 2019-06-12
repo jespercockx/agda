@@ -163,6 +163,13 @@ instance PatternFrom Type Term NLPat where
                         IntSet.fromList (map unArg bvs) == allBoundVars
                if ok then return (PVar i bvs) else done
              _ -> done
+       -- If the first elimination is a projection, we can unspine the
+       -- whole expression
+       | Proj o f : es' <- es -> do
+           ti <- typeOfBV i
+           tf <- fromMaybe __IMPOSSIBLE__ <$> getDefType f ti
+           let es'' = Apply (defaultArg $ var i) : es'
+           patternFrom r k (tf , PDef f) es''
        | otherwise -> done
       (_ , _ ) | Just (d, pars) <- etaRecord -> do
         def <- theDef <$> getConstInfo d
