@@ -56,30 +56,31 @@ instance (PatternFrom t a b) => PatternFrom (Dom t) (Arg a) (Arg b) where
   patternFrom r k t u = let r' = r `composeRelevance` getRelevance u
                         in  traverse (patternFrom r' k $ unDom t) u
 
-instance PatternFrom (Type, Term) Elims [Elim' NLPat] where
-  patternFrom r k (t,hd) = \case
-    [] -> return []
-    (Apply u : es) -> do
-      ~(Pi a b) <- unEl <$> abortIfBlocked t
-      p   <- patternFrom r k a u
-      t'  <- piApplyM' (blockOnMetasIn t >> __IMPOSSIBLE__) t u
-      let hd' = hd `apply` [ u ]
-      ps  <- patternFrom r k (t',hd') es
-      return $ Apply p : ps
-    (IApply x y i : es) -> do
-      ~(PathType s q l b u v) <- pathView =<< abortIfBlocked t
-      let t' = El s $ unArg b `apply` [ defaultArg i ]
-      let hd' = hd `applyE` [IApply x y i]
-      interval <- primIntervalType
-      p   <- patternFrom r k interval i
-      ps  <- patternFrom r k (t',hd') es
-      return $ IApply (PTerm x) (PTerm y) p : ps
-    (Proj o f : es) -> do
-      ~(Just (El _ (Pi a b))) <- getDefType f =<< abortIfBlocked t
-      let t' = b `absApp` hd
-      hd' <- applyDef o f (argFromDom a $> hd)
-      ps  <- patternFrom r k (t',hd') es
-      return $ Proj o f : ps
+instance PatternFrom (Type, PElims -> NLPat) Elims NLPat where
+  patternFrom r k (t,hd) es = ($ []) <$> loop t hd es
+    where
+      loop t hd = \case
+        [] -> return hd
+        (Apply u : es) -> do
+          ~(Pi a b) <- unEl <$> abortIfBlocked t
+          p   <- patternFrom r k a u
+          t'  <- piApplyM' (blockOnMetasIn t >> __IMPOSSIBLE__) t u
+          loop t' (hd . (Apply p:)) es
+        (IApply x y i : es) -> do
+          ~(PathType s q l b u v) <- pathView =<< abortIfBlocked t
+          let t' = El s $ unArg b `apply` [ defaultArg i ]
+          interval <- primIntervalType
+          p <- patternFrom r k interval i
+          loop t' (hd . (IApply (PTerm x) (PTerm y) p:)) es
+        (Proj o f : es) -> do
+          reportSDoc "rewriting.build" 70 $ fsep
+            [ "Projecting value" , prettyTCM (hd [])
+            , "of type" , prettyTCM t
+            , "with projection" , prettyTCM f
+            ]
+          ~(Just (El _ (Pi a b))) <- getDefType f =<< abortIfBlocked t
+          t' <- absApp b <$> nlPatToTerm (hd [])
+          loop t' (PDef f . (Apply (defaultArg $ hd []) :)) es
 
 instance (PatternFrom t a b) => PatternFrom t (Dom a) (Dom b) where
   patternFrom r k t = traverse $ patternFrom r k t
@@ -143,7 +144,7 @@ instance PatternFrom Type Term NLPat where
       (_ , Var i es)
        | i < k     -> do
            t <- typeOfBV i
-           PBoundVar i <$> patternFrom r k (t , var i) es
+           patternFrom r k (t , PBoundVar i) es
        -- The arguments of `var i` should be distinct bound variables
        -- in order to build a Miller pattern
        | Just vs <- allApplyElims es -> do
@@ -166,8 +167,8 @@ instance PatternFrom Type Term NLPat where
       (_ , _ ) | Just (d, pars) <- etaRecord -> do
         def <- theDef <$> getConstInfo d
         (tel, c, ci, vs) <- etaExpandRecord_ d pars def v
-        caseMaybeM (getFullyAppliedConType c t) __IMPOSSIBLE__ $ \ (_ , ct) -> do
-        PDef (conName c) <$> patternFrom r k (ct , Con c ci []) (map Apply vs)
+        ct <- snd . fromMaybe __IMPOSSIBLE__ <$> getFullyAppliedConType c t
+        patternFrom r k (ct , PDef (conName c)) (map Apply vs)
       (_ , Lam i t) -> __IMPOSSIBLE__
       (_ , Lit{})   -> done
       (_ , Def f es) | isIrrelevant r -> done
@@ -179,11 +180,11 @@ instance PatternFrom Type Term NLPat where
           [x , y] | f == lmax -> done
           _                   -> do
             ft <- defType <$> getConstInfo f
-            PDef f <$> patternFrom r k (ft , Def f []) es
+            patternFrom r k (ft , PDef f) es
       (_ , Con c ci vs) | isIrrelevant r -> done
       (_ , Con c ci vs) ->
         caseMaybeM (getFullyAppliedConType c t) __IMPOSSIBLE__ $ \ (_ , ct) -> do
-        PDef (conName c) <$> patternFrom r k (ct , Con c ci []) vs
+        patternFrom r k (ct , PDef (conName c)) vs
       (_ , Pi a b) | isIrrelevant r -> done
       (_ , Pi a b) -> do
         pa <- patternFrom r k () a
