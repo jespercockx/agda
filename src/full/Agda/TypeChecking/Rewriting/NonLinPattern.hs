@@ -1,5 +1,9 @@
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+-- UndecidableInstances are needed for:
+-- 1. instance PatternFrom (Dom t) (Arg a) (Arg b)
+-- 2. instance PatternFrom t (Dom a) (Dom b)
 
 {- | Various utility functions dealing with the non-linear, higher-order
      patterns used for rewrite rules.
@@ -45,7 +49,7 @@ import Agda.Utils.Size
 --   The second argument is the number of bound variables (from pattern lambdas).
 --   The third argument is the type of the term.
 
-class PatternFrom t a b where
+class PatternFrom t a b | a -> b where
   patternFrom :: Relevance -> Int -> t -> a -> TCM b
 
 instance (PatternFrom t a b) => PatternFrom (Dom t) (Arg a) (Arg b) where
