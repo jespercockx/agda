@@ -67,6 +67,7 @@ import Agda.TypeChecking.Conversion
 import qualified Agda.TypeChecking.Positivity.Occurrence as Pos
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Primitive ( getBuiltinName )
+import Agda.TypeChecking.Records ( isRecordType, getDefType )
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
@@ -211,7 +212,7 @@ addRewriteRule q = do
       lhs <- modifyAllowedReductions (const [InlineReductions]) $ normalise lhs
 
       -- Find head symbol f of the lhs, its type and its arguments.
-      (f , hd , t , es) <- case lhs of
+      (f , hd , t , es) <- addContext gamma1 $ case lhs of
         Def f es -> do
           def <- getConstInfo f
           checkAxFunOrCon f def
@@ -219,8 +220,13 @@ addRewriteRule q = do
         Con c ci vs -> do
           let hd = Con c ci
           ~(Just ((_ , _ , pars) , t)) <- getFullyAppliedConType c $ unDom b
-          addContext gamma1 $ checkParametersAreGeneral c (size gamma1) pars
+          checkParametersAreGeneral c (size gamma1) pars
           return (conName c , hd , t  , vs)
+        Var i (Proj _ f:es) -> do
+          a <- typeOfBV i
+          t <- fromMaybe __IMPOSSIBLE__ <$> getDefType f a
+          let es' = Apply (defaultArg $ var i) : es
+          return (f , Def f , t , es')
         _        -> failureNotDefOrCon
 
       ifNotAlreadyAdded f $ do
