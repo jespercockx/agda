@@ -293,7 +293,12 @@ origProjection f = do
 --
 --   See also: 'Agda.TypeChecking.Datatypes.getConType'
 getDefType :: PureTCM m => QName -> Type -> m (Maybe Type)
-getDefType f t = do
+getDefType f t = fmap fst <$> getDefTypeAndPars f t
+
+-- | Like @getDefType@, but also returns the parameters of the
+--   data/record/axiom.
+getDefTypeAndPars :: PureTCM m => QName -> Type -> m (Maybe (Type, Args))
+getDefTypeAndPars f t = do
   -- Andreas, Issue #1973: we need to take the original projection
   -- since the parameters from the reduced type t are correct for
   -- the original projection only.
@@ -303,7 +308,7 @@ getDefType f t = do
   (f, def, mp) <- origProjection f
   let a = defType def
   -- if @f@ is not a projection (like) function, @a@ is the correct type
-      fallback = return $ Just a
+      fallback = return $ Just (a , [])
   reportSDoc "tc.deftype" 20 $ vcat
     [ "definition f =" <+> prettyTCM f <+> text ("  -- raw: " ++ prettyShow f)
     , "has type   a =" <+> prettyTCM a
@@ -332,7 +337,9 @@ getDefType f t = do
               ]
             reportSLn "tc.deftype" 60 $ "parameters = " ++ show pars
             if length pars < npars then failure "does not supply enough parameters"
-            else Just <$> a `piApplyM` pars
+            else do
+              a' <- a `piApplyM` pars
+              return $ Just (a' , pars)
         _ -> failNotDef
   where
     failNotElig = failure "is not eligible for projection-likeness"
