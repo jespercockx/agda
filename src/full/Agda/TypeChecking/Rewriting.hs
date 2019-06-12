@@ -67,7 +67,7 @@ import Agda.TypeChecking.Conversion
 import qualified Agda.TypeChecking.Positivity.Occurrence as Pos
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Primitive ( getBuiltinName )
-import Agda.TypeChecking.Records ( isRecordType, getDefType )
+import Agda.TypeChecking.Records ( isRecordType, getDefTypeAndPars )
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
@@ -212,21 +212,22 @@ addRewriteRule q = do
       lhs <- modifyAllowedReductions (const [InlineReductions]) $ normalise lhs
 
       -- Find head symbol f of the lhs, its type and its arguments.
-      (f , hd , t , es) <- addContext gamma1 $ case lhs of
+      (f , hd , t , pars , es) <- addContext gamma1 $ case lhs of
         Def f es -> do
           def <- getConstInfo f
           checkAxFunOrCon f def
-          return (f , Def f , defType def , es)
+          return (f , Def f , defType def , [] , es)
         Con c ci vs -> do
           let hd = Con c ci
           ~(Just ((_ , _ , pars) , t)) <- getFullyAppliedConType c $ unDom b
-          checkParametersAreGeneral c (size gamma1) pars
-          return (conName c , hd , t  , vs)
+          checkParametersAreGeneral (conName c) (size gamma1) pars
+          return (conName c , hd , t , pars  , vs)
         Var i (Proj _ f:es) -> do
           a <- typeOfBV i
-          t <- fromMaybe __IMPOSSIBLE__ <$> getDefType f a
+          (t , pars) <- fromMaybe __IMPOSSIBLE__ <$> getDefTypeAndPars f a
           let es' = Apply (defaultArg $ var i) : es
-          return (f , Def f , t , es')
+          checkParametersAreGeneral f (size gamma1) pars
+          return (f , Def f , t , pars , es')
         _        -> failureNotDefOrCon
 
       ifNotAlreadyAdded f $ do
@@ -331,8 +332,8 @@ addRewriteRule q = do
         used Pos.Unused = False
         used _          = True
 
-    checkParametersAreGeneral :: ConHead -> Int -> Args -> TCM ()
-    checkParametersAreGeneral c k vs = do
+    checkParametersAreGeneral :: QName -> Int -> Args -> TCM ()
+    checkParametersAreGeneral f k vs = do
         is <- loop vs
         unless (fastDistinct is) $ errorNotGeneral
       where
@@ -343,9 +344,9 @@ addRewriteRule q = do
 
         errorNotGeneral :: TCM a
         errorNotGeneral = typeError . GenericDocError =<< vcat
-            [ prettyTCM q <+> text " is not a legal rewrite rule, since the constructor parameters are not fully general:"
-            , nest 2 $ text "Constructor: " <+> prettyTCM c
-            , nest 2 $ text "Parameters: " <+> prettyList (map prettyTCM vs)
+            [ prettyTCM q <+> text " is not a legal rewrite rule, since the parameters are not fully general:"
+            , nest 2 $ text "Head symbol: " <+> prettyTCM f
+            , nest 2 $ text "Parameters:  " <+> prettyList_ (map prettyTCM vs)
             ]
 
 -- | @rewriteWith t f es rew@ where @f : t@
