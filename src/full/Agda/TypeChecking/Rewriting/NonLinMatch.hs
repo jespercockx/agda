@@ -326,15 +326,15 @@ instance Match Type NLPat Term where
                 body  = raise 1 v `apply` [ Arg (domInfo a) $ var 0 ]
                 k'    = ExtendTel a (Abs (absName b) k)
             match r gamma k' (absBody b) pbody body
-          _ | Just (d, pars) <- etaRecord -> do
+          _ | Just (d, dpars) <- etaRecord -> do
           -- If v is not of record constructor form but we are matching at record
           -- type, e.g., we eta-expand both v to (c vs) and
           -- the pattern (p = PDef f ps) to @c (p .f1) ... (p .fn)@.
             def <- addContext k $ theDef <$> getConstInfo d
-            (tel, c, ci, vs) <- addContext k $ etaExpandRecord_ d pars def v
+            (tel, c, ci, vs) <- addContext k $ etaExpandRecord_ d dpars def v
             ~(Just (_ , ct)) <- addContext k $ getFullyAppliedConType c t
             let flds = map argFromDom $ recFields def
-                mkField fld = PDef f (ps ++ [Proj ProjSystem fld])
+                mkField fld = PDef fld [ Apply $ defaultArg $ PDef f ps ]
                 -- Issue #3335: when matching against the record constructor,
                 -- don't add projections but take record field directly.
                 ps'
@@ -376,7 +376,8 @@ instance Match Type NLPat Term where
           (tel, c, ci, vs) <- addContext k $ etaExpandRecord_ d pars def v
           ~(Just (_ , ct)) <- addContext k $ getFullyAppliedConType c t
           let flds = map argFromDom $ recFields def
-              ps'  = map (fmap $ \fld -> PBoundVar i (ps ++ [Proj ProjSystem fld])) flds
+              mkField fld = PDef fld [ Apply $ defaultArg $ PBoundVar i ps ]
+              ps'  = map (fmap mkField) flds
           match r gamma k (ct, Con c ci) (map Apply ps') (map Apply vs)
         v -> maybeBlock v
       PTerm u -> traceSDoc "rewriting.match" 60 ("matching a PTerm" <+> addContext (gamma `abstract` k) (prettyTCM u)) $
