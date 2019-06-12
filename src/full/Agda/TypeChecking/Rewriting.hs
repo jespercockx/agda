@@ -237,7 +237,7 @@ addRewriteRule q = do
           reportSDoc "rewriting" 30 $ "metas in b  : " <+> text (show $ allMetasList b)
           failureMetas
 
-        ps <- patternFrom Relevant 0 (t , Def f []) es
+        ~(PDef f ps) <- patternFrom Relevant 0 (t , PDef f) es
         reportSDoc "rewriting" 30 $
           "Pattern generated from lhs: " <+> prettyTCM (PDef f ps)
 
