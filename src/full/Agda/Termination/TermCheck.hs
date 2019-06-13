@@ -972,9 +972,9 @@ tryReduceNonRecursiveClause g es continue fallback = do
   reportSLn  "term.reduce" 80 . ("allowed reductions = " ++) . show . SmallSet.elems
     =<< asksTC envAllowedReductions
 
-  -- Finally, try to reduce with the non-recursive clauses (and no rewrite rules).
+  -- Finally, try to reduce with the non-recursive clauses.
   r <- liftTCM $ modifyAllowedReductions (SmallSet.delete UnconfirmedReductions) $
-    runReduceM $ appDefE' g v0 cls [] (map notReduced es)
+    runReduceM $ appDefE' g v0 cls (map notReduced es)
   case r of
     NoReduction{}    -> fallback
     YesReduction _ v -> do

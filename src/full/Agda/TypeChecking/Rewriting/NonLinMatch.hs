@@ -1,4 +1,6 @@
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE UndecidableInstances     #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
 
 {- |  Non-linear matching of the lhs of a rewrite rule against a
       neutral term.
@@ -311,10 +313,14 @@ instance Match Type NLPat Term where
 
       PDef f ps -> traceSDoc "rewriting.match" 60 ("matching a PDef: " <+> prettyTCM f) $ do
         v <- addContext k $ constructorForm =<< unLevel v
+        traceSDoc "rewriting.match" 80 ("unSpineView t =" <+> prettyTCM t) $ do
+        traceSDoc "rewriting.match" 80 ("unSpineView v =" <+> prettyTCM v) $ do
+        vApp <- addContext k $ unSpineView t v
+        traceSDoc "rewriting.match" 80 ("unSpineView result =" <+> case vApp of
+                                           Just (f',_,_) -> prettyTCM f'
+                                           Nothing       -> text "Nothing") $ do
         case v of
-          Def f' es
-            | f == f'   -> do
-                ft <- addContext k $ defType <$> getConstInfo f
+          _ | Just (f', ft, es) <- vApp , f == f'  -> do
                 match r gamma k (ft , Def f) ps es
           Con c ci vs
             | f == conName c -> do
@@ -410,6 +416,50 @@ reallyFree xs v = do
       | otherwise = f1
     pickFree f1@(MaybeFree ms1) NotFree = f1
     pickFree NotFree f2 = f2
+
+-- Unspine one level of the given expression (of the given
+-- type). Returns the head symbol, its type, and its eliminations.
+unSpineView
+  :: forall m. PureTCM m
+  => Type -> Term -> m (Maybe (QName , Type , Elims))
+unSpineView a = \case
+  Var i es    -> do
+    t <- typeOfBV i
+    loop Nothing t (Var i) es
+  Def f es    -> do
+    t <- defType <$> getConstInfo f
+    loop (Just (f,t,es)) t (Def f) es
+  MetaV m es  -> do
+    t <- getMetaType m
+    loop Nothing t (MetaV m) es
+
+  Con{}       -> return Nothing
+  Lam{}       -> return Nothing
+  Lit{}       -> return Nothing
+  Pi{}        -> return Nothing
+  Sort{}      -> return Nothing
+  Level{}     -> return Nothing
+  DontCare{}  -> return Nothing
+  Dummy{}     -> return Nothing
+
+  where
+    loop :: Maybe (QName , Type , Elims)
+         -> Type
+         -> (Elims -> Term)
+         -> Elims
+         -> m (Maybe (QName , Type , Elims))
+    loop defaultResult thd hd = \case
+      [] -> return defaultResult
+      (Apply v : es) -> do
+        thd' <- thd `piApplyM` v
+        let hd' = hd . (Apply v :)
+        loop defaultResult thd' hd' es
+      (IApply{} : es) -> __IMPOSSIBLE__ -- TODO
+      (Proj o f' : es) -> do
+        tf' <- fromMaybe __IMPOSSIBLE__ <$> getDefType f' thd
+        let e0 = Apply $ defaultArg $ hd []
+            newDefaultResult = Just (f', tf' , e0 : es)
+        loop newDefaultResult tf' (Def f') (e0 : es)
 
 
 makeSubstitution :: Telescope -> Sub -> Maybe Substitution

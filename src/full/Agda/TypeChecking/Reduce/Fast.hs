@@ -97,7 +97,6 @@ data CompactDef =
              , cdefNonterminating :: Bool
              , cdefUnconfirmed    :: Bool
              , cdefDef            :: CompactDefn
-             , cdefRewriteRules   :: RewriteRules
              }
 
 data CompactDefn
@@ -116,8 +115,8 @@ data BuiltinEnv = BuiltinEnv
   , bPrimForce, bPrimErase  :: Maybe QName }
 
 -- | Compute a 'CompactDef' from a regular definition.
-compactDef :: BuiltinEnv -> Definition -> RewriteRules -> ReduceM CompactDef
-compactDef bEnv def rewr = do
+compactDef :: BuiltinEnv -> Definition -> ReduceM CompactDef
+compactDef bEnv def = do
 
   -- WARNING: don't use isPropM here because it relies on reduction,
   -- which causes an infinite loop.
@@ -309,7 +308,6 @@ compactDef bEnv def rewr = do
                , cdefNonterminating = defNonterminating def
                , cdefUnconfirmed    = defTerminationUnconfirmed def
                , cdefDef            = cdefn
-               , cdefRewriteRules   = rewr
                }
 
 -- Faster case trees ------------------------------------------------------
@@ -437,9 +435,7 @@ fastReduce' norm v = do
   rwr <- optRewriting <$> pragmaOptions
   constInfo <- unKleisli $ \f -> do
     info <- getConstInfo f
-    rewr <- if rwr then instantiateRewriteRules =<< getRewriteRulesFor f
-                   else return []
-    compactDef bEnv info rewr
+    compactDef bEnv info
   let flags = ReductionFlags{ allowNonTerminating = NonTerminatingReductions `SmallSet.member` allowedReductions
                             , allowUnconfirmed    = UnconfirmedReductions `SmallSet.member` allowedReductions
                             , hasRewriting        = rwr }
@@ -817,7 +813,6 @@ reduceTm rEnv bEnv !constInfo normalisation ReductionFlags{..} =
                        Nothing -> InstV . rmvInstantiation <$>
                                     HMap.lookup m remoteMetas
     partialDefs    = runReduce getPartialDefs
-    rewriteRules f = cdefRewriteRules (constInfo f)
     callByNeed     = envCallByNeed (redEnv rEnv) && not (optCallByName $ redSt rEnv ^. stPragmaOptions)
     iview          = runReduce intervalView'
 
@@ -1336,18 +1331,14 @@ reduceTm rEnv bEnv !constInfo normalisation ReductionFlags{..} =
     -- rewriting and pack the result back up in a closure. In case some rewrite rules actually fired
     -- the next state is an unevaluated closure, otherwise it's a value closure.
     rewriteAM' :: AM s -> ST s (Blocked Term)
-    rewriteAM' s@(Eval (Closure (Value blk) t env spine) ctrl)
-      | null rewr = runAM s
-      | otherwise = traceDoc ("R" <+> pretty s) $ do
+    rewriteAM' s@(Eval (Closure (Value blk) t env spine) ctrl) =
+      traceDoc ("R" <+> pretty s) $ do
         v0 <- decodeClosure_ (Closure Unevaled t env [])
         es <- decodeSpine spine
-        case runReduce (rewrite blk (applyE v0) rewr es) of
+
+        case runReduce (rewrite $ blk $> v0 `applyE` es) of
           NoReduction b    -> runAM (evalValue (() <$ b) (ignoreBlocking b) emptyEnv [] ctrl)
           YesReduction _ v -> runAM (evalClosure v emptyEnv [] ctrl)
-      where rewr = case t of
-                     Def f []   -> rewriteRules f
-                     Con c _ [] -> rewriteRules (conName c)
-                     _          -> __IMPOSSIBLE__
     rewriteAM' _ =
       __IMPOSSIBLE__
 
