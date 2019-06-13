@@ -430,11 +430,14 @@ slowReduceTerm v = do
     v <- instantiate' v
     let done = return $ notBlocked v
         iapp = reduceIApply done
+        rew  = rewrite >=> \case
+          NoReduction bv -> return bv
+          YesReduction simp w -> reduceB' w
     case v of
 --    Andreas, 2012-11-05 not reducing meta args does not destroy anything
 --    and seems to save 2% sec on the standard library
 --      MetaV x args -> notBlocked . MetaV x <$> reduce' args
-      MetaV x es -> iapp es
+      MetaV x es -> iapp es >>= rew
       Def f es   -> flip reduceIApply es $ unfoldDefinitionE False reduceB' (Def f []) f es
       Con c ci es -> do
           -- Constructors can reduce' when they come from an
@@ -449,7 +452,7 @@ slowReduceTerm v = do
                     {- else -} done
       Pi _ _   -> done
       Lit _    -> done
-      Var _ es  -> iapp es
+      Var _ es  -> iapp es >>= rew
       Lam _ _  -> done
       DontCare _ -> done
       Dummy{}    -> done
@@ -518,7 +521,6 @@ unfoldDefinitionStep :: Bool -> Term -> QName -> Elims -> ReduceM (Reduced (Bloc
 unfoldDefinitionStep unfoldDelayed v0 f es =
   {-# SCC "reduceDef" #-} do
   info <- getConstInfo f
-  rewr <- instantiateRewriteRules =<< getRewriteRulesFor f
   allowed <- asksTC envAllowedReductions
   let def = theDef info
       v   = v0 `applyE` es
@@ -538,7 +540,7 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
       pf <- fromMaybe __IMPOSSIBLE__ <$> getPrimitive' x
       if FunctionReductions `elem` allowed
         then reducePrimitive x v0 f es pf dontUnfold
-                             cls (defCompiled info) rewr
+                             cls (defCompiled info)
         else noReduction $ notBlocked v
     _  -> do
       if (RecursiveReductions `elem` allowed) ||
@@ -548,13 +550,13 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
          (definitelyNonRecursive_ def && FunctionReductions `elem` allowed)
         then
           reduceNormalE v0 f (map notReduced es) dontUnfold
-                       (defClauses info) (defCompiled info) rewr
+                       (defClauses info) (defCompiled info)
         else noReduction $ notBlocked v  -- Andrea(s), 2014-12-05 OK?
 
   where
     noReduction    = return . NoReduction
     yesReduction s = return . YesReduction s
-    reducePrimitive x v0 f es pf dontUnfold cls mcc rewr
+    reducePrimitive x v0 f es pf dontUnfold cls mcc
       | length es < ar
                   = noReduction $ NotBlocked Underapplied $ v0 `applyE` es -- not fully applied
       | otherwise = {-# SCC "reducePrimitive" #-} do
@@ -564,12 +566,7 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
           case r of
             NoReduction args1' -> do
               let es1' = map (fmap Apply) args1'
-              if null cls && null rewr then do
-                noReduction $ applyE (Def f []) <$> do
-                  traverse id $
-                    map mredToBlocked es1' ++ map notBlocked es2
-               else
-                reduceNormalE v0 f (es1' ++ map notReduced es2) dontUnfold cls mcc rewr
+              reduceNormalE v0 f (es1' ++ map notReduced es2) dontUnfold cls mcc
             YesReduction simpl v -> yesReduction simpl $ v `applyE` es2
       where
           ar  = primFunArity pf
@@ -577,13 +574,9 @@ unfoldDefinitionStep unfoldDelayed v0 f es =
           mredToBlocked (MaybeRed NotReduced  x) = notBlocked x
           mredToBlocked (MaybeRed (Reduced b) x) = x <$ b
 
-    reduceNormalE :: Term -> QName -> [MaybeReduced Elim] -> Bool -> [Clause] -> Maybe CompiledClauses -> RewriteRules -> ReduceM (Reduced (Blocked Term) Term)
-    reduceNormalE v0 f es dontUnfold def mcc rewr = {-# SCC "reduceNormal" #-} do
-      case (def,rewr) of
-        _ | dontUnfold -> defaultResult -- non-terminating or delayed
-        ([],[])        -> defaultResult -- no definition for head
-        (cls,rewr)     -> do
-          ev <- appDefE_ f v0 cls mcc rewr es
+    reduceNormalE :: Term -> QName -> [MaybeReduced Elim] -> Bool -> [Clause] -> Maybe CompiledClauses -> ReduceM (Reduced (Blocked Term) Term)
+    reduceNormalE v0 f es dontUnfold cls mcc = {-# SCC "reduceNormal" #-} do
+          ev <- appDefE_ f v0 cls mcc es
           debugReduce ev
           return ev
       where
@@ -609,18 +602,17 @@ reduceDefCopy :: forall m. (MonadReduce m, HasConstInfo m, HasOptions m,
               => QName -> Elims -> m (Reduced () Term)
 reduceDefCopy f es = do
   info <- getConstInfo f
-  rewr <- instantiateRewriteRules =<< getRewriteRulesFor f
-  if (defCopy info) then reduceDef_ info rewr f es else return $ NoReduction ()
+  if (defCopy info) then reduceDef_ info f es else return $ NoReduction ()
   where
-    reduceDef_ :: Definition -> RewriteRules -> QName -> Elims -> m (Reduced () Term)
-    reduceDef_ info rewr f es = do
+    reduceDef_ :: Definition -> QName -> Elims -> m (Reduced () Term)
+    reduceDef_ info f es = do
       let v0   = Def f []
           cls  = (defClauses info)
           mcc  = (defCompiled info)
       if (defDelayed info == Delayed) || (defNonterminating info)
        then return $ NoReduction ()
        else do
-          ev <- liftReduce $ appDefE_ f v0 cls mcc rewr $ map notReduced es
+          ev <- liftReduce $ appDefE_ f v0 cls mcc $ map notReduced es
           case ev of
             YesReduction simpl t -> return $ YesReduction simpl t
             NoReduction{}        -> return $ NoReduction ()
@@ -678,34 +670,34 @@ unfoldInlined v = do
 
 -- | Apply a definition using the compiled clauses, or fall back to
 --   ordinary clauses if no compiled clauses exist.
-appDef_ :: QName -> Term -> [Clause] -> Maybe CompiledClauses -> RewriteRules -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
-appDef_ f v0 cls mcc rewr args = appDefE_ f v0 cls mcc rewr $ map (fmap Apply) args
+appDef_ :: QName -> Term -> [Clause] -> Maybe CompiledClauses -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
+appDef_ f v0 cls mcc args = appDefE_ f v0 cls mcc $ map (fmap Apply) args
 
-appDefE_ :: QName -> Term -> [Clause] -> Maybe CompiledClauses -> RewriteRules -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
-appDefE_ f v0 cls mcc rewr args =
+appDefE_ :: QName -> Term -> [Clause] -> Maybe CompiledClauses -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
+appDefE_ f v0 cls mcc args =
   localTC (\ e -> e { envAppDef = Just f }) $
-  maybe (appDefE' v0 cls rewr args)
-        (\cc -> appDefE v0 cc rewr args) mcc
+  maybe (appDefE' v0 cls args)
+        (\cc -> appDefE v0 cc args) mcc
 
 
 -- | Apply a defined function to it's arguments, using the compiled clauses.
 --   The original term is the first argument applied to the third.
-appDef :: Term -> CompiledClauses -> RewriteRules -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
-appDef v cc rewr args = appDefE v cc rewr $ map (fmap Apply) args
+appDef :: Term -> CompiledClauses -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
+appDef v cc args = appDefE v cc $ map (fmap Apply) args
 
-appDefE :: Term -> CompiledClauses -> RewriteRules -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
-appDefE v cc rewr es = do
+appDefE :: Term -> CompiledClauses -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
+appDefE v cc es = do
   r <- matchCompiledE cc es
   case r of
     YesReduction simpl t -> return $ YesReduction simpl t
-    NoReduction es'      -> rewrite (void es') v rewr (ignoreBlocking es')
+    NoReduction es'      -> rewrite $ applyE v <$> es'
 
 -- | Apply a defined function to it's arguments, using the original clauses.
-appDef' :: Term -> [Clause] -> RewriteRules -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
-appDef' v cls rewr args = appDefE' v cls rewr $ map (fmap Apply) args
+appDef' :: Term -> [Clause] -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
+appDef' v cls args = appDefE' v cls $ map (fmap Apply) args
 
-appDefE' :: Term -> [Clause] -> RewriteRules -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
-appDefE' v cls rewr es = goCls cls $ map ignoreReduced es
+appDefE' :: Term -> [Clause] -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
+appDefE' v cls es = goCls cls $ map ignoreReduced es
   where
     goCls :: [Clause] -> [Elim] -> ReduceM (Reduced (Blocked Term) Term)
     goCls cl es = do
@@ -716,7 +708,7 @@ appDefE' v cls rewr es = goCls cls $ map ignoreReduced es
         -- the remaining clauses (see Issue 907).
         -- Andrea(s), 2014-12-05:  We return 'MissingClauses' here, since this
         -- is the most conservative reason.
-        [] -> rewrite (NotBlocked MissingClauses ()) v rewr es
+        [] -> rewrite $ NotBlocked MissingClauses $ v `applyE` es
         cl : cls -> do
           let pats = namedClausePats cl
               body = clauseBody cl
@@ -729,7 +721,7 @@ appDefE' v cls rewr es = goCls cls $ map ignoreReduced es
             es <- return $ es0 ++ es1
             case m of
               No         -> goCls cls es
-              DontKnow b -> rewrite b v rewr es
+              DontKnow b -> rewrite $ b $> v `applyE` es
               Yes simpl vs -- vs is the subst. for the variables bound in body
                 | Just w <- body -> do -- clause has body?
                     -- TODO: let matchPatterns also return the reduced forms
@@ -737,7 +729,7 @@ appDefE' v cls rewr es = goCls cls $ map ignoreReduced es
                     -- Andreas, 2013-05-19 isn't this done now?
                     let sigma = buildSubstitution __IMPOSSIBLE__ nvars vs
                     return $ YesReduction simpl $ applySubst sigma w `applyE` es1
-                | otherwise     -> rewrite (NotBlocked AbsurdMatch ()) v rewr es
+                | otherwise     -> rewrite $ NotBlocked AbsurdMatch $ v `applyE` es
 
 instance Reduce a => Reduce (Closure a) where
     reduce' cl = do

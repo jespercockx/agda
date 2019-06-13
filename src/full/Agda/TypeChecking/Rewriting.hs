@@ -67,7 +67,7 @@ import Agda.TypeChecking.Conversion
 import qualified Agda.TypeChecking.Positivity.Occurrence as Pos
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Primitive ( getBuiltinName )
-import Agda.TypeChecking.Records ( isRecordType, getDefTypeAndPars )
+import Agda.TypeChecking.Records ( isRecordType, getDefType , getDefTypeAndPars )
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
@@ -209,7 +209,8 @@ addRewriteRule q = do
       -- 2017-06-18, Jesper: Unfold inlined definitions on the LHS.
       -- This is necessary to replace copies created by imports by their
       -- original definition.
-      lhs <- modifyAllowedReductions (const [InlineReductions]) $ normalise lhs
+      lhs <- addContext gamma1 $
+        modifyAllowedReductions (const [InlineReductions]) $ normalise lhs
 
       -- Find head symbol f of the lhs, its type and its arguments.
       (f , hd , t , pars , es) <- addContext gamma1 $ case lhs of
@@ -236,7 +237,7 @@ addRewriteRule q = do
         -- Normalize lhs args: we do not want to match redexes.
         es <- normalise es
 
-        checkNoLhsReduction f es
+        --checkNoLhsReduction f es
 
         unless (noMetas (es, rhs, b)) $ do
           reportSDoc "rewriting" 30 $ "metas in lhs: " <+> text (show $ allMetasList es)
@@ -284,8 +285,11 @@ addRewriteRule q = do
     _ -> failureWrongTarget
 
   where
-    checkNoLhsReduction :: QName -> Elims -> TCM ()
-    checkNoLhsReduction f es = do
+    {-
+    checkNoLhsReduction :: QName -> Type -> Elims -> TCM ()
+    checkNoLhsReduction f t es = do
+      reportSDoc "rewriting" 30 $ fsep
+        [ "checkNoLhsReduction" , prettyTCM f , prettyTCM es ]
       let v = Def f es
       v' <- reduce v
       let fail = do
@@ -302,6 +306,7 @@ addRewriteRule q = do
                    compareElims pol [] a (Def f []) es es'
           unless ok fail
         _ -> fail
+    -}
 
     checkAxFunOrCon :: QName -> Definition -> TCM ()
     checkAxFunOrCon f def = case theDef def of
@@ -379,38 +384,73 @@ rewriteWith t v rew@(RewriteRule q gamma _ ps rhs b) es = do
         ]) $ do
       return $ Right v'
 
--- | @rewrite b v rules es@ tries to rewrite @v@ applied to @es@ with the
---   rewrite rules @rules@. @b@ is the default blocking tag.
-rewrite :: Blocked_ -> Term -> RewriteRules -> Elims -> ReduceM (Reduced (Blocked Term) Term)
-rewrite block v rules es = do
-  rewritingAllowed <- optRewriting <$> pragmaOptions
-  if (rewritingAllowed && not (null rules)) then do
-    t <- case v of
-      Def f []   -> defType <$> getConstInfo f
-      Con c _ [] -> typeOfConst $ conName c
-        -- Andreas, 2018-09-08, issue #3211:
-        -- discount module parameters for constructor heads
-      _ -> __IMPOSSIBLE__
-    loop block t rules =<< instantiateFull' es -- TODO: remove instantiateFull?
-  else
-    return $ NoReduction (block $> v `applyE` es)
+-- | @rewrite bv@ tries to rewrite @bv@ using declared rewrite rules.
+rewrite :: Blocked Term -> ReduceM (Reduced (Blocked Term) Term)
+rewrite bv = ifNotM (optRewriting <$> pragmaOptions) (return $ NoReduction bv) $ do
+  reportSDoc "rewriting.rewrite" 20 $ "rewriting: looking at term" <+> prettyTCM (ignoreBlocking bv)
+  case ignoreBlocking bv of
+    Var i es -> do
+      t <- typeOfBV i
+      loopElims (void bv) t (Var i) es
+    Def f es -> do
+      rews <- instantiateRewriteRules =<< getRewriteRulesFor f
+      t <- defType <$> getConstInfo f
+      loopRules (void bv) t rews (Def f) es >>= \case
+        YesReduction simp v' -> return $ YesReduction simp v'
+        NoReduction bv' -> loopElims (void bv') t (Def f) es
+    Con c ci es -> do
+      rews <- getRewriteRulesFor $ conName c
+      t <- typeOfConst $ conName c
+      loopRules (void bv) t rews (Con c ci) es
+    MetaV m es -> do
+      t <- getMetaType m
+      loopElims (void bv) t (MetaV m) es
+    _ -> return $ NoReduction bv
+
   where
-    loop :: Blocked_ -> Type -> RewriteRules -> Elims -> ReduceM (Reduced (Blocked Term) Term)
-    loop block t [] es =
+
+    loopRules :: Blocked_
+              -> Type
+              -> RewriteRules
+              -> (Elims -> Term)
+              -> Elims
+              -> ReduceM (Reduced (Blocked Term) Term)
+    loopRules block t [] hd es =
       traceSDoc "rewriting.rewrite" 20 (sep
-        [ "failed to rewrite " <+> prettyTCM (v `applyE` es)
+        [ "failed to rewrite " <+> prettyTCM (hd es)
         , "blocking tag" <+> text (show block)
         ]) $ do
-      return $ NoReduction $ block $> v `applyE` es
-    loop block t (rew:rews) es
+      return $ NoReduction $ block $> hd es
+    loopRules block t (rew:rews) hd es
      | let n = rewArity rew, length es >= n = do
           let (es1, es2) = List.genericSplitAt n es
-          result <- rewriteWith t v rew es1
+          result <- rewriteWith t (hd []) rew es1
           case result of
-            Left (Blocked m u)    -> loop (block `mappend` Blocked m ()) t rews es
-            Left (NotBlocked _ _) -> loop block t rews es
+            Left (Blocked m u)    -> loopRules (block `mappend` Blocked m ()) t rews hd es
+            Left (NotBlocked _ _) -> loopRules block t rews hd es
             Right w               -> return $ YesReduction YesSimplification $ w `applyE` es2
-     | otherwise = loop (block `mappend` NotBlocked Underapplied ()) t rews es
+     | otherwise = loopRules (block `mappend` NotBlocked Underapplied ()) t rews hd es
 
-    rewArity :: RewriteRule -> Int
-    rewArity = length . rewPats
+    loopElims :: Blocked_
+              -> Type
+              -> (Elims -> Term)
+              -> Elims
+              -> ReduceM (Reduced (Blocked Term) Term)
+    loopElims blk t hd [] = return $ NoReduction $ blk $> hd []
+    loopElims blk t hd (e : es) = case e of
+      Apply v  -> do
+        t' <- t `piApplyM` v
+        loopElims blk t (hd . (e:)) es
+      IApply{} -> __IMPOSSIBLE__ -- TODO
+      Proj o f -> do
+        rewr <- instantiateRewriteRules =<< getRewriteRulesFor f
+        tf <- fromMaybe __IMPOSSIBLE__ <$> getDefType f t
+        let v0 = defaultArg $ hd []
+        loopRules blk tf rewr (Def f) (Apply v0 : es) >>= \case
+          NoReduction bv       -> do
+            t <- tf `piApplyM` v0
+            loopElims (blk `mappend` void bv) t (hd . (e:)) es
+          YesReduction simp w -> return $ YesReduction simp w
+
+rewArity :: RewriteRule -> Int
+rewArity = length . rewPats
