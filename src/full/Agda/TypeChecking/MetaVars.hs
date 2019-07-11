@@ -174,7 +174,11 @@ newTypeMeta :: Sort -> TCM Type
 newTypeMeta s = El s . snd <$> newValueMeta RunMetaOccursCheck (sort s)
 
 newTypeMeta_ ::  TCM Type
-newTypeMeta_  = newTypeMeta =<< (workOnTypes $ newSortMeta)
+newTypeMeta_  = do
+  s <- workOnTypes $ newSortMeta
+  t@(El _ (MetaV m es)) <- newTypeMeta s
+  equalSort s $ SortOfMeta m es
+  return t
 -- TODO: (this could be made work with new uni-poly)
 -- Andreas, 2011-04-27: If a type meta gets solved, than we do not have to check
 -- that it has a sort.  The sort comes from the solution.

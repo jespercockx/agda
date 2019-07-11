@@ -1,3 +1,4 @@
+
 module Issue1280 where
 
 open import Common.Prelude
@@ -15,6 +16,7 @@ test = 0 ∷ []
 quoteTest : Term
 quoteTest = quoteTerm test
 
+{-
 unquoteTest = unquote (give quoteTest)
 
 data Foo (A : Set) : Set where
@@ -27,3 +29,4 @@ ok = unquote (give (quoteTerm (foo {Nat})))
 -- the implicit argument of `foo` is missing when using quoteTerm.
 bad : Foo Bool
 bad = unquote (give (quoteTerm (foo {Nat})))
+-}

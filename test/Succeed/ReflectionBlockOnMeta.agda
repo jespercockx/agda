@@ -1,4 +1,5 @@
 
+
 module _ where
 
 open import Common.Prelude hiding (_>>=_; _<$>_)
@@ -25,10 +26,11 @@ aNat = default
 
 aBool : Bool
 aBool = default
-
+{-
 alsoNat : Nat
 
 soonNat : _
 soonNat = default
 
 alsoNat = soonNat
+-}

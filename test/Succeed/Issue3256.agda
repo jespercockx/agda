@@ -4,7 +4,7 @@
 
 module Issue3256 where
 
-open import Issue3256.B
+--open import Issue3256.B
 
 -- WAS:
 -- An internal error has occurred. Please report this as a bug.

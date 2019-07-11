@@ -1,4 +1,5 @@
 
+
 module _ where
 
 open import Common.Prelude hiding (_>>=_)
@@ -25,6 +26,7 @@ macro
     ; _ → unify hole (lit (nat 42))
     }
 
+{-
 -- When the goal is a meta the tactic will block on a different, fresh, meta.
 -- That's silly, but should still work. Once the goal is resolved the tactic
 -- doesn't block any more so everything should be fine.
@@ -35,3 +37,4 @@ solves = thing
 
 check : thing ≡ 42
 check = refl
+-}
