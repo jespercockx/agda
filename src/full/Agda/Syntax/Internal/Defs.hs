@@ -83,6 +83,7 @@ instance GetDefs Sort where
     SizeUniv  -> return ()
     PiSort a s  -> getDefs a >> getDefs s
     UnivSort s  -> getDefs s
+    SortOfMeta x es -> getDefs x >> getDefs es
     MetaS x es  -> getDefs x >> getDefs es
     DefS d es   -> doDef d >> getDefs es
     DummyS{}    -> return ()

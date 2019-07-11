@@ -1267,6 +1267,10 @@ instance Reify Sort Expr where
           univs <- freshName_ ("univSort" :: String) -- TODO: hack
           e <- reify s
           return $ A.App defaultAppInfo_ (A.Var univs) $ defaultNamedArg e
+        I.SortOfMeta x es -> do
+          sortof <- freshName_ ("sortOf" :: String) -- TODO: hack
+          e <- reify $ I.MetaV x es
+          return $ A.App defaultAppInfo_ (A.Var sortof) $ defaultNamedArg e
         I.MetaS x es -> reify $ I.MetaV x es
         I.DefS d es -> reify $ I.Def d es
         I.DummyS s -> return $ A.Lit $ LitString noRange s

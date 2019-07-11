@@ -146,6 +146,7 @@ instance TermLike Sort where
     SizeUniv   -> pure s
     PiSort a b -> PiSort   <$> traverseTermM f a <*> traverseTermM f b
     UnivSort a -> UnivSort <$> traverseTermM f a
+    SortOfMeta x es -> SortOfMeta x <$> traverseTermM f es
     MetaS x es -> MetaS x  <$> traverseTermM f es
     DefS q es  -> DefS q   <$> traverseTermM f es
     DummyS{}   -> pure s
@@ -157,6 +158,7 @@ instance TermLike Sort where
     SizeUniv   -> mempty
     PiSort a b -> foldTerm f a <> foldTerm f b
     UnivSort a -> foldTerm f a
+    SortOfMeta _ es -> foldTerm f es
     MetaS _ es -> foldTerm f es
     DefS _ es  -> foldTerm f es
     DummyS{}   -> mempty

@@ -183,3 +183,6 @@ sortOf t = elimView True t >>= \case
       IApply x y r -> do
         (b , c) <- fromMaybe __IMPOSSIBLE__ <$> isPath a
         sortOfE (c `absApp` r) (hd . (e:)) es
+
+sortOf' :: Term -> ReduceM Sort
+sortOf' = sortOf

@@ -512,6 +512,9 @@ instance Occurs Sort where
       s@Inf      -> return s
       s@SizeUniv -> return s
       UnivSort s -> UnivSort <$> do weakly $ occurs s
+      SortOfMeta x es -> do
+        MetaV x es <- flexibly $ occurs $ MetaV x es -- flexibly to prevent pruning
+        return $ SortOfMeta x es
       MetaS x es -> do
         MetaV x es <- occurs (MetaV x es)
         return $ MetaS x es
@@ -529,6 +532,7 @@ instance Occurs Sort where
       Inf        -> return ()
       SizeUniv   -> return ()
       UnivSort s -> metaOccurs m s
+      SortOfMeta x es -> metaOccurs m $ MetaV x es
       MetaS x es -> metaOccurs m $ MetaV x es
       DefS d es  -> metaOccurs m $ Def d es
       DummyS{}   -> return ()
@@ -743,6 +747,7 @@ instance AnyRigid Sort where
       SizeUniv   -> return False
       PiSort a s -> return False
       UnivSort s -> anyRigid f s
+      SortOfMeta{} -> return False
       MetaS{}    -> return False
       DefS{}     -> return False
       DummyS{}   -> return False

@@ -393,6 +393,11 @@ checkSort action s =
       s2' <- mapAbstraction dom' (checkSort action) s2
       return $ PiSort dom' s2'
     UnivSort s -> UnivSort <$> checkSort action s
+    SortOfMeta m es -> do
+      t <- checkInternal' action (MetaV m es) $ sort s
+      case t of
+        MetaV m' es' | m == m' -> return $ SortOfMeta m' es'
+        _ -> sortOf t
     MetaS x es -> do -- we assume sort meta instantiations to be well-formed
       a <- metaType x
       let self = Sort $ MetaS x []

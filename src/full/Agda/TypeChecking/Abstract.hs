@@ -175,6 +175,7 @@ instance AbsTerm Sort where
     SizeUniv   -> SizeUniv
     PiSort a s -> PiSort (absS a) (absS s)
     UnivSort s -> UnivSort $ absS s
+    SortOfMeta x es -> SortOfMeta x $ absS es
     MetaS x es -> MetaS x $ absS es
     DefS d es  -> DefS d $ absS es
     DummyS{}   -> s
@@ -270,6 +271,7 @@ instance EqualSy Sort where
     (SizeUniv  , SizeUniv    ) -> True
     (PiSort a b, PiSort a' b') -> equalSy a a' && equalSy b b'
     (UnivSort a, UnivSort a' ) -> equalSy a a'
+    (SortOfMeta x es, SortOfMeta x' es') -> x == x' && equalSy es es'
     (MetaS x es, MetaS x' es') -> x == x' && equalSy es es'
     (DefS  d es, DefS  d' es') -> d == d' && equalSy es es'
     (DummyS{}  , _           ) -> __IMPOSSIBLE__

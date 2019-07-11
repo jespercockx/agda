@@ -55,6 +55,7 @@ instance MentionsMeta Sort where
     SizeUniv   -> False
     PiSort a s -> mentionsMetas xs (a, s)
     UnivSort s -> mentionsMetas xs s
+    SortOfMeta m es -> HashSet.member m xs || mentionsMetas xs es
     MetaS m es -> HashSet.member m xs || mentionsMetas xs es
     DefS d es  -> mentionsMetas xs es
     DummyS{}   -> False

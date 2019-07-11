@@ -806,6 +806,7 @@ instance (Coercible a Term, Subst t a) => Subst t (Sort' a) where
     SizeUniv   -> SizeUniv
     PiSort a s2 -> coerce $ piSort (coerce $ sub a) (coerce $ sub s2)
     UnivSort s -> coerce $ univSort Nothing $ coerce $ sub s
+    SortOfMeta x es -> SortOfMeta x $ sub es
     MetaS x es -> MetaS x $ sub es
     DefS d es  -> DefS d $ sub es
     DummyS{}   -> s

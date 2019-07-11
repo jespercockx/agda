@@ -39,6 +39,7 @@ import {-# SOURCE #-} Agda.TypeChecking.Patterns.Match
 import {-# SOURCE #-} Agda.TypeChecking.Pretty
 import {-# SOURCE #-} Agda.TypeChecking.Rewriting
 import {-# SOURCE #-} Agda.TypeChecking.Reduce.Fast
+import {-# SOURCE #-} Agda.TypeChecking.Sort
 
 import Agda.Utils.Functor
 import Agda.Utils.Lens
@@ -157,6 +158,9 @@ instance Instantiate Sort where
       MetaV x' es' -> return $ MetaS x' es'
       Def d es'     -> return $ DefS d es'
       _            -> __IMPOSSIBLE__
+    SortOfMeta x es -> instantiate' (MetaV x es) >>= \case
+      MetaV x' es' | x == x' -> return $ SortOfMeta x' es'
+      t -> sortOf' t
     _ -> return s
 
 instance Instantiate Elim where
@@ -297,6 +301,7 @@ instance Reduce Sort where
           s' <- reduce' s'
           ui <- univInf
           caseMaybe (univSort' ui s') (return $ UnivSort s') reduce'
+        SortOfMeta x es -> return s
         Prop s'    -> Prop <$> reduce' s'
         Type s'    -> Type <$> reduce' s'
         Inf        -> return Inf
@@ -840,6 +845,7 @@ instance Simplify Sort where
         UnivSort s -> do
           ui <- univInf
           univSort ui <$> simplify' s
+        SortOfMeta x es -> SortOfMeta x <$> simplify' es
         Type s     -> Type <$> simplify' s
         Prop s     -> Prop <$> simplify' s
         Inf        -> return s
@@ -977,6 +983,7 @@ instance Normalise Sort where
         UnivSort s -> do
           ui <- univInf
           univSort ui <$> normalise' s
+        SortOfMeta x es -> return s
         Prop s     -> Prop <$> normalise' s
         Type s     -> Type <$> normalise' s
         Inf        -> return Inf
@@ -1156,6 +1163,7 @@ instance InstantiateFull Sort where
             UnivSort s -> do
               ui <- univInf
               univSort ui <$> instantiateFull' s
+            SortOfMeta x es -> SortOfMeta x <$> instantiateFull' es
             Inf        -> return s
             SizeUniv   -> return s
             MetaS x es -> MetaS x <$> instantiateFull' es

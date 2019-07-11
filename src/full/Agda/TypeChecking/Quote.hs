@@ -134,6 +134,7 @@ quotingKit = do
       quoteSort SizeUniv = pure unsupportedSort
       quoteSort PiSort{} = pure unsupportedSort
       quoteSort UnivSort{}   = pure unsupportedSort
+      quoteSort SortOfMeta{} = pure unsupportedSort
       quoteSort (MetaS x es) = quoteTerm $ MetaV x es
       quoteSort (DefS d es)  = quoteTerm $ Def d es
       quoteSort (DummyS s)   =__IMPOSSIBLE_VERBOSE__ s

@@ -111,6 +111,7 @@ instance NamesIn Sort where
     SizeUniv -> Set.empty
     PiSort a b -> namesIn (a, b)
     UnivSort a -> namesIn a
+    SortOfMeta _ es -> namesIn es
     MetaS _ es -> namesIn es
     DefS d es  -> namesIn (d, es)
     DummyS{}   -> Set.empty

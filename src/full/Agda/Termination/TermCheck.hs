@@ -678,6 +678,7 @@ instance ExtractCalls Sort where
       Prop t     -> terUnguarded $ extract t
       PiSort a s -> extract (a, s)
       UnivSort s -> extract s
+      SortOfMeta x es -> return empty
       MetaS x es -> return empty
       DefS d es  -> return empty
       DummyS{}   -> return empty

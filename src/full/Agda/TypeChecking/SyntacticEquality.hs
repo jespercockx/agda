@@ -135,6 +135,7 @@ instance SynEq Sort where
       (Type l  , Type l'   ) -> Type <$$> synEq l l'
       (PiSort a b, PiSort a' b') -> piSort <$$> synEq a a' <**> synEq' b b'
       (UnivSort a, UnivSort a') -> UnivSort <$$> synEq a a'
+      (SortOfMeta x es , SortOfMeta x' es') | x == x' -> SortOfMeta x <$$> synEq es es'
       (SizeUniv, SizeUniv  ) -> pure2 s
       (Prop l  , Prop l'   ) -> Prop <$$> synEq l l'
       (Inf     , Inf       ) -> pure2 s

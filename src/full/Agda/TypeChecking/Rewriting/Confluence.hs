@@ -557,6 +557,7 @@ instance AllHoles Sort where
     SizeUniv     -> empty
     PiSort s1 s2 -> __IMPOSSIBLE__
     UnivSort s   -> __IMPOSSIBLE__
+    SortOfMeta{} -> __IMPOSSIBLE__
     MetaS{}      -> __IMPOSSIBLE__
     DefS f es    -> do
       fa <- defType <$> getConstInfo f
@@ -639,6 +640,7 @@ instance MetasToVars Sort where
     SizeUniv   -> pure SizeUniv
     PiSort s t -> PiSort   <$> metasToVars s <*> metasToVars t
     UnivSort s -> UnivSort <$> metasToVars s
+    SortOfMeta x es -> SortOfMeta x <$> metasToVars es -- TODO: is this ok?
     MetaS x es -> MetaS x  <$> metasToVars es
     DefS f es  -> DefS f   <$> metasToVars es
     DummyS s   -> pure $ DummyS s

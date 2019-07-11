@@ -143,6 +143,7 @@ instance EmbPrj I.Sort where
   icod_ Inf         = icodeN 3 Inf
   icod_ (PiSort a b) = icodeN 4 PiSort a b
   icod_ (UnivSort a) = icodeN 5 UnivSort a
+  icod_ (SortOfMeta a b) = __IMPOSSIBLE__
   icod_ (MetaS a b)  = __IMPOSSIBLE__
   icod_ (DefS a b)   = icodeN 6 DefS a b
   icod_ (DummyS s)   = __IMPOSSIBLE__

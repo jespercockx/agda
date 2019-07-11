@@ -1199,14 +1199,16 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
       -- This shouldn't be necessary
       (UnivSort Inf , UnivSort Inf) -> yes
 
-      -- PiSort, UnivSort and MetaS might reduce once we instantiate
-      -- more metas, so we postpone.
+      -- PiSort, UnivSort, MetaS, and SortOfMeta might reduce once we
+      -- instantiate more metas, so we postpone.
       (PiSort{}, _       ) -> postpone
       (_       , PiSort{}) -> postpone
       (UnivSort{}, _     ) -> postpone
       (_     , UnivSort{}) -> postpone
       (MetaS{} , _       ) -> postpone
       (_       , MetaS{} ) -> postpone
+      (SortOfMeta{} , _           ) -> postpone
+      (_            , SortOfMeta{}) -> postpone
 
       -- DefS are postulated sorts, so they do not reduce.
       (DefS d es , DefS d' es') | d == d' -> postpone
@@ -1555,6 +1557,7 @@ equalSort s1 s2 = do
             -- Other blocked sorts: check syntactic equality
             (PiSort{}    , PiSort{}   ) -> synEq
             (UnivSort{}  , UnivSort{} ) -> synEq
+            (SortOfMeta{} , SortOfMeta{}) -> synEq
 
             -- diagonal cases for rigid sorts
             (Type a     , Type b     ) -> equalLevel a b
@@ -1593,11 +1596,14 @@ equalSort s1 s2 = do
             (UnivSort s    , SizeUniv   )   -> no
 
 
-            -- PiSort and UnivSort could compute later, so we postpone
+            -- PiSort, UnivSort, and SortOfMeta could compute later,
+            -- so we postpone
             (PiSort{}   , _          ) -> postpone
             (_          , PiSort{}   ) -> postpone
             (UnivSort{} , _          ) -> postpone
             (_          , UnivSort{} ) -> postpone
+            (SortOfMeta{} , _           ) -> postpone
+            (_            , SortOfMeta{}) -> postpone
 
             -- postulated sorts can only be equal if they have the same head
             (DefS d es  , DefS d' es') | d == d' -> synEq
