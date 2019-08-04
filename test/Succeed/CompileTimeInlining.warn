@@ -1,0 +1,83 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > Failed to solve the following constraints:
+out >   [2362, 2370, 2371] eval
+out >                      (app''
+out >                       (app''
+out >                        (var
+out >                         (right
+out >                          ((λ g →
+out >                              fun (el (snd (fst (fst g)))) (fun (el (snd (fst (fst g)))) set))
+out >                           ,
+out >                           refl ,
+out >                           right
+out >                           ((λ g → fun (el (snd (fst g))) (fun (el (snd (fst g))) set)) ,
+out >                            refl , left refl))))
+out >                        (var (left refl)) refl)
+out >                       (var (left refl)) refl)
+out >                      g₁
+out >                        = snd (fst (fst g₁)) (snd g₁) (snd g₁)
+out >                        : Set
+out >   [1748, 1756, 1757] lookup
+out >                      (snoc
+out >                       (snoc (snoc empty (λ _ → set))
+out >                        (λ z → fun (el (snd z)) (fun (el (snd z)) set)))
+out >                       (λ z → pi (el (snd (fst z))) (λ x → el (snd z x x))))
+out >                      (λ _ → set)
+out >                      (right
+out >                       ((λ g → set) , refl , right ((λ g → set) , refl , left refl)))
+out >                      g₁
+out >                        = snd (fst (fst g₁))
+out >                        : Set
+out >   [1354, 1360, 1361] eval
+out >                      (app''
+out >                       (app''
+out >                        (var
+out >                         (right
+out >                          ((λ g → fun (el (snd (fst g))) (fun (el (snd (fst g))) set)) ,
+out >                           refl , left refl)))
+out >                        (var (left refl)) refl)
+out >                       (var (left refl)) refl)
+out >                      g₁
+out >                        = snd (fst g₁) (snd g₁) (snd g₁)
+out >                        : Set
+out >   [1039, 1045, 1046] lookup
+out >                      (snoc (snoc empty (λ _ → set))
+out >                       (λ z → fun (el (snd z)) (fun (el (snd z)) set)))
+out >                      (λ _ → set) (right ((λ g → set) , refl , left refl)) g₁
+out >                        = snd (fst g₁)
+out >                        : Set
+out >   [897, 903, 904] lookup
+out >                   (snoc (snoc empty (λ _ → set)) (λ z → el (snd z))) (λ _ → set)
+out >                   (right ((λ g → set) , refl , left refl)) g₁
+out >                     = snd (fst g₁)
+out >                     : Set
+out > Unsolved metas at the following locations:
+out >   CompileTimeInlining.agda:207,49-57
+out >   CompileTimeInlining.agda:207,39-59
+out >   CompileTimeInlining.agda:209,27-35
+out >   CompileTimeInlining.agda:209,17-37
+out >   CompileTimeInlining.agda:210,37-45
+out >   CompileTimeInlining.agda:210,53-57
+out >   CompileTimeInlining.agda:210,27-30
+out >   CompileTimeInlining.agda:210,22-25
+out >   CompileTimeInlining.agda:210,27-58
+out >   CompileTimeInlining.agda:210,65-69
+out >   CompileTimeInlining.agda:210,17-20
+out >   CompileTimeInlining.agda:210,22-70
+out >   CompileTimeInlining.agda:210,17-71
+out >   CompileTimeInlining.agda:211,32-40
+out >   CompileTimeInlining.agda:211,27-41
+out >   CompileTimeInlining.agda:211,17-43
+out >   CompileTimeInlining.agda:212,42-50
+out >   CompileTimeInlining.agda:212,37-51
+out >   CompileTimeInlining.agda:212,59-63
+out >   CompileTimeInlining.agda:212,27-30
+out >   CompileTimeInlining.agda:212,22-25
+out >   CompileTimeInlining.agda:212,27-64
+out >   CompileTimeInlining.agda:212,71-75
+out >   CompileTimeInlining.agda:212,17-20
+out >   CompileTimeInlining.agda:212,22-76
+out >   CompileTimeInlining.agda:212,17-77
+out >

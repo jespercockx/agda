@@ -1,8 +1,20 @@
-Failed to solve the following constraints:
-  [156] _109 (us = us) =< us ⊆ us 
-Unsolved metas at the following locations:
-  Issue3982.agda:24,3-43
-  Issue3982.agda:30,8-12
-Unsolved interaction metas at the following locations:
-  Issue3982.agda:30,8-12
-  Issue3982.agda:31,11-15
+Issue3982.agda:30,8-12
+Variable generalization failed.
+  - Probable cause
+      There were unsolved constraints that obscured the dependencies
+      between the generalized variables.
+  - Suggestion
+      The most reliable solution is to provide enough information to make
+      the dependencies clear, but simply mentioning the variables in the
+      right order should also work.
+  - Further information
+    - Dependency analysis suggested this (likely incorrect) order: x xs
+    - The dependency I error is
+      Issue3982.agda:30,8-12
+      {A : Set genTel₁} {zs : List A} {x : A} {xs ys : List A}
+      {τ : x ∷ xs ⊆ zs} {σ : ys ⊆ zs} (us : List A) (ρ : us ⊆ zs)
+      (τ' : x ∷ xs ⊆ us) (σ' : ys ⊆ us) (τ'∘ρ≡τ : ⊆-trans τ' ρ ≡ τ)
+      (σ'∘ρ≡σ : ⊆-trans σ' ρ ≡ σ) (genTel : Issue3982.GeneralizeTel) →
+      A
+      !=< A₁
+when checking that the expression ? is a type

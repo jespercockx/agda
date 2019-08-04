@@ -1,8 +1,3 @@
-Issue921.agda:49,1-117,17
-Termination checking failed for the following functions:
-  _○_, pullback-var, pullback
-Problematic calls:
-  weaken Δ ○ snd xtc.eq ms
-  pullback x m
-  pullback-var
-    (at Issue921.agda:108,99-111)
+AGDA_UNEXPECTED_SUCCESS
+
+ret > ExitSuccess

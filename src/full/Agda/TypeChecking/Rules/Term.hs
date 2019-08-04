@@ -97,7 +97,10 @@ isType e s =
 -- | Check that an expression is a type without knowing the sort.
 isType_ :: A.Expr -> TCM Type
 isType_ e = traceCall (IsType_ e) $ do
-  let fallback = isType e =<< do workOnTypes $ newSortMeta
+  let fallback = do
+        t <- isType e =<< do workOnTypes $ newSortMeta
+        reportSDoc "tc.check.type" 30 $ "inferred sort of" <+> prettyTCM t <+> "is" <+> prettyTCM (getSort t)
+        return t
   case unScope e of
     A.Fun i (Arg info t) b -> do
       a <- setArgInfo info . defaultDom <$> isType_ t

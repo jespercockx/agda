@@ -1,0 +1,8 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > Issue2054.agda:24,24-29
+out > j !=< (_j_20 (ft = ft)) of type Size
+out > when checking that the solution ft of metavariable _ft_23 has the
+out > expected type R (_j_20 (ft = ft))
+out >

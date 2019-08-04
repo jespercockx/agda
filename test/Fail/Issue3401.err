@@ -1,7 +1,21 @@
-Failed to solve the following constraints:
-  [11] _v.T_22 _v.i_23 =< _T_24 _i_25
-Unsolved metas at the following locations:
-  Issue3401.agda:12,7-8
-  Issue3401.agda:12,5-6
-Unsolved interaction metas at the following locations:
-  Issue3401.agda:13,5-9
+Issue3401.agda:12,5-6
+Variable generalization failed.
+  - Probable cause
+      There were unsolved constraints that obscured the dependencies
+      between the generalized variables.
+  - Suggestion
+      The most reliable solution is to provide enough information to make
+      the dependencies clear, but simply mentioning the variables in the
+      right order should also work.
+  - Further information
+    - Dependency analysis suggested this (likely incorrect) order: v
+    - The dependency I error is
+      Issue3401.agda:12,5-6
+      Failed to solve the following constraints:
+        [16] (genTel : Issue3401.GeneralizeTel) → _v.T_22 _v.i_23
+               =< _v.T_22 _v.i_23
+               
+      when checking that v is a valid argument to a function of type
+      {T : I → Set} {i : I} → T i → Set
+when checking that v is a valid argument to a function of type
+{T : I → Set} {i : I} → T i → Set

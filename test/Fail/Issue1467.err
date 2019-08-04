@@ -1,4 +1,4 @@
-Issue1467.agda:25,14-19
-(D → D) × D != D → D of type Set
-when checking that the expression bar H has type
-P (foo (λ A → (A → A) × A))
+Issue1467.agda:25,6-11
+(D → D) × D !=< D → D
+when checking that the solution foo (λ A → (A → A) × A) of
+metavariable _26 has the expected type D → D

@@ -1,0 +1,8 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > CubicalPrims.agda:227,41-45
+out > Expected an irrelevant argument, but found a relevant argument
+out > when checking that the solution T x of metavariable _T_730 has the
+out > expected type Set (_ℓ'_727 (t = t) (a = a))
+out >

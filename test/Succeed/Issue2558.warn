@@ -1,0 +1,8 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > Issue2558.agda:22,14-17
+out > l !=< (_i_37 (δ = δ)) of type Size
+out > when checking that the solution Γ of metavariable _Γ_45 has the
+out > expected type Con (_i_37 (δ = δ))
+out >

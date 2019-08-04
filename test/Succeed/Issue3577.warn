@@ -1,0 +1,9 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > Issue3577.agda:18,28-29
+out > The constructor susp* does not construct an element of
+out > Susp' (fst A , _snd_29 (A = A))
+out > when checking that the solution susp* ≡ susp* of metavariable _A_22
+out > has the expected type Set (_ℓ_21 (A = A))
+out >
