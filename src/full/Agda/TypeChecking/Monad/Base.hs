@@ -962,7 +962,7 @@ data Constraint
   | ElimCmp [Polarity] [IsForced] Type Term [Elim] [Elim]
   | TypeCmp Comparison Type Type
   | TelCmp Type Type Comparison Telescope Telescope -- ^ the two types are for the error message only
-  | SortCmp Comparison Sort Sort
+  | SortCmp Comparison RegardRelevance Sort Sort
   | LevelCmp Comparison Level Level
 --  | ShortCut MetaId Term Type
 --    -- ^ A delayed instantiation.  Replaces @ValueCmp@ in 'postponeTypeCheckingProblem'.
@@ -1006,7 +1006,7 @@ instance Free Constraint where
       ElimCmp _ _ t u es es'  -> freeVars' ((t, u), (es, es'))
       TypeCmp _ t t'        -> freeVars' (t, t')
       TelCmp _ _ _ tel tel' -> freeVars' (tel, tel')
-      SortCmp _ s s'        -> freeVars' (s, s')
+      SortCmp _ _ s s'      -> freeVars' (s, s')
       LevelCmp _ l l'       -> freeVars' (l, l')
       UnBlock _             -> mempty
       Guarded c _           -> freeVars' c
@@ -1030,7 +1030,7 @@ instance TermLike Constraint where
       UnquoteTactic _ t h g  -> foldTerm f (t, h, g)
       Guarded c _            -> foldTerm f c
       TelCmp _ _ _ tel1 tel2 -> foldTerm f (tel1, tel2)
-      SortCmp _ s1 s2        -> foldTerm f (s1, s2)
+      SortCmp _ _ s1 s2      -> foldTerm f (s1, s2)
       UnBlock _              -> mempty
       FindInstance _ _ _     -> mempty
       CheckFunDef _ _ _ _    -> mempty
@@ -1074,6 +1074,9 @@ dirToCmp :: (Comparison -> a -> a -> c) -> CompareDirection -> a -> a -> c
 dirToCmp cont DirEq  = cont CmpEq
 dirToCmp cont DirLeq = cont CmpLeq
 dirToCmp cont DirGeq = flip $ cont CmpLeq
+
+data RegardRelevance = RegardRelevance | DisregardRelevance
+  deriving (Data, Eq, Show)
 
 ---------------------------------------------------------------------------
 -- * Open things

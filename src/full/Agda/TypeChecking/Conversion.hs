@@ -516,7 +516,7 @@ compareAtom cmp t m n =
         case (m, n) of
           (Pi{}, Pi{}) -> equalFun m n
 
-          (Sort s1, Sort s2) -> compareSort CmpEq s1 s2
+          (Sort s1, Sort s2) -> equalSort RegardRelevance s1 s2
 
           (Lit l1, Lit l2) | l1 == l2 -> return ()
           (Var i es, Var i' es') | i == i' -> do
@@ -998,7 +998,7 @@ compareType cmp ty1@(El s1 a1) ty2@(El s2 a2) =
           ]
 -- Andreas, 2011-4-27 should not compare sorts, but currently this is needed
 -- for solving sort and level metas
-        compareSort CmpEq s1 s2 `catchError` \err -> case err of
+        equalSort RegardRelevance s1 s2 `catchError` \err -> case err of
           TypeError _ e -> do
             reportSDoc "tc.conv.type" 30 $ vcat
               [ "sort comparison failed"
@@ -1022,7 +1022,7 @@ compareType cmp ty1@(El s1 a1) ty2@(El s2 a2) =
             -- when we compared the types.  So we try the sort comparison
             -- again, this time not catching the error.  (see Issue 930)
             -- throwError err
-            compareSort CmpEq s1 s2
+            equalSort RegardRelevance s1 s2
           _             -> throwError err
         compareTerm cmp (sort s1) a1 a2
         return ()
@@ -1137,7 +1137,7 @@ compareLevel :: MonadConversion m => Comparison -> Level -> Level -> m ()
 compareLevel CmpLeq u v = leqLevel u v
 compareLevel CmpEq  u v = equalLevel u v
 
-compareSort :: MonadConversion m => Comparison -> Sort -> Sort -> m ()
+compareSort :: MonadConversion m => Comparison -> RegardRelevance -> Sort -> Sort -> m ()
 compareSort CmpEq  = equalSort
 compareSort CmpLeq = leqSort
 
@@ -1146,10 +1146,10 @@ compareSort CmpLeq = leqSort
 --   We can put @SizeUniv@ below @Inf@, but otherwise, it is
 --   unrelated to the other universes.
 --
-leqSort :: forall m. MonadConversion m => Sort -> Sort -> m ()
-leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
+leqSort :: forall m. MonadConversion m => RegardRelevance -> Sort -> Sort -> m ()
+leqSort rr s1 s2 = (catchConstraint (SortCmp CmpLeq rr s1 s2) :: m () -> m ()) $ do
   (s1,s2) <- reduce (s1,s2)
-  let postpone = addConstraint (SortCmp CmpLeq s1 s2)
+  let postpone = addConstraint (SortCmp CmpLeq rr s1 s2)
       no       = typeError $ NotLeqSort s1 s2
       yes      = return ()
   reportSDoc "tc.conv.sort" 30 $
@@ -1173,20 +1173,25 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
       -- Likewise for @Prop@
       (Prop a  , Prop b  ) -> leqLevel a b
 
-      -- @Prop l@ is below @Set l@
-      (Prop a  , Type b  ) -> leqLevel a b
-      (Type a  , Prop b  ) -> no
+      -- Currently, we don't have subtyping @Prop l =< Set l@. This
+      -- may change in the future.
+      (Prop a  , Type b  )
+        | rr == DisregardRelevance -> leqLevel a b
+        | otherwise                -> no
+      (Type a  , Prop b  )
+        | rr == DisregardRelevance -> leqLevel a b
+        | otherwise                -> no
 
       -- Setω is the top sort
       (_       , Inf     ) -> yes
-      (Inf     , _       ) -> equalSort s1 s2
+      (Inf     , _       ) -> equalSort rr s1 s2
 
       -- @SizeUniv@ and @Prop0@ are bottom sorts.
       -- So is @Set0@ if @Prop@ is not enabled.
-      (_       , SizeUniv) -> equalSort s1 s2
-      (_       , Prop (Max [])) -> equalSort s1 s2
+      (_       , SizeUniv) -> equalSort rr s1 s2
+      (_       , Prop (Max [])) -> equalSort rr s1 s2
       (_       , Type (Max []))
-        | not propEnabled  -> equalSort s1 s2
+        | not propEnabled  -> equalSort rr s1 s2
 
       -- If @PiSort a b@ is below some rigid sort @Set l@ or @Prop l@,
       -- we know that @b@ must also be below this rigid sort. We can
@@ -1200,7 +1205,7 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
 
       -- If the first sort rigidly depends on a variable and the second
       -- sort does not mention this variable, the second sort must be Inf.
-      (_       , _       ) | badRigid -> equalSort s2 Inf
+      (_       , _       ) | badRigid -> equalSort rr s2 Inf
 
       -- This shouldn't be necessary
       (UnivSort Inf , UnivSort Inf) -> yes
@@ -1221,11 +1226,12 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
 
   where
   piSortBelowRigid s a bAbs = do
-    underAbstractionAbs a bAbs $ \b -> leqSort b (raise 1 s)
+    _ok <- tryConversion $ underAbstractionAbs a bAbs $ \b ->
+      leqSort RegardRelevance b (raise 1 s)
     (a , bAbs) <- reduce (a , bAbs)
     case piSort' a bAbs of
-      Just s' -> leqSort s' s
-      Nothing -> addConstraint $ SortCmp CmpLeq (PiSort a bAbs) s
+      Just s' -> leqSort rr s' s
+      Nothing -> addConstraint $ SortCmp CmpLeq rr (PiSort a bAbs) s
 
   impossibleSort s = do
     reportS "impossible" 10
@@ -1525,11 +1531,11 @@ equalLevel' a b = do
 
 
 -- | Check that the first sort equal to the second.
-equalSort :: MonadConversion m => Sort -> Sort -> m ()
-equalSort s1 s2 = do
-    catchConstraint (SortCmp CmpEq s1 s2) $ do
+equalSort :: MonadConversion m => RegardRelevance -> Sort -> Sort -> m ()
+equalSort rr s1 s2 = do
+    catchConstraint (SortCmp CmpEq rr s1 s2) $ do
         (s1,s2) <- reduce (s1,s2)
-        let postpone = addConstraint (SortCmp CmpEq s1 s2)
+        let postpone = addConstraint (SortCmp CmpEq rr s1 s2)
             yes      = return ()
             no       = typeError $ UnequalSorts s1 s2
             synEq    = ifNotM (optSyntacticEquality <$> pragmaOptions) postpone $ do
@@ -1575,11 +1581,23 @@ equalSort s1 s2 = do
             (Prop a     , Prop b     ) -> equalLevel a b
             (Inf        , Inf        ) -> yes
 
+            -- when @rr = DisregardRelevance@ (e.g. for checking that
+            -- the sort of a constructor argument fits in the sort of
+            -- the datatype), we consider @Prop@ and @Set@ as the same
+            (Type a     , Prop b     )
+              | rr == DisregardRelevance -> equalLevel a b
+            (Prop a     , Type b     )
+              | rr == DisregardRelevance -> equalLevel a b
+
             -- if --type-in-type is enabled, Setω is equal to any Set ℓ (see #3439)
             (Type{}     , Inf        )
               | typeInTypeEnabled      -> yes
             (Inf        , Type{}     )
               | typeInTypeEnabled      -> yes
+            (Prop{}     , Inf        )
+              | typeInTypeEnabled , rr == DisregardRelevance -> yes
+            (Inf        , Prop{}     )
+              | typeInTypeEnabled , rr == DisregardRelevance -> yes
 
             -- if @PiSort a b == Set l@, then @b =< Set l@
             -- we use this fact to solve metas in @b@,
@@ -1593,9 +1611,9 @@ equalSort s1 s2 = do
 
             -- @PiSort a b == SizeUniv@ iff @b == SizeUniv@
             (SizeUniv   , PiSort a b ) ->
-              underAbstraction a b $ equalSort SizeUniv
+              underAbstraction a b $ equalSort rr SizeUniv
             (PiSort a b , SizeUniv   ) ->
-              underAbstraction a b $ equalSort SizeUniv
+              underAbstraction a b $ equalSort rr SizeUniv
 
             -- @Set0@, @Prop0@ and @SizeUniv@ don't contain any universes,
             -- so they cannot be a UnivSort
@@ -1629,12 +1647,13 @@ equalSort s1 s2 = do
       -- equate @piSort a b@ to @s@, which is assumed to be either
       -- @Set l@ or @Prop l@, in which case we know @b =< s@.
       piSortEqualsRigid s a bAbs = do
-        underAbstractionAbs a bAbs $ \b -> b `leqSort` (raise 1 s)
+        _ok <- tryConversion $ underAbstractionAbs a bAbs $ \b ->
+          leqSort rr b (raise 1 s)
         -- we may have instantiated some metas, so @a@ or @bAbs@ could reduce
         (a , bAbs) <- reduce (a , bAbs)
         case piSort' a bAbs of
-          Just s' -> equalSort s s'
-          Nothing -> addConstraint $ SortCmp CmpEq (PiSort a bAbs) s
+          Just s' -> equalSort rr s s'
+          Nothing -> addConstraint $ SortCmp CmpEq rr (PiSort a bAbs) s
       impossibleSort s = do
         reportS "impossible" 10
           [ "equalSort: found dummy sort with description:"

@@ -520,7 +520,7 @@ pruneUnsolvedMetas genRecName genRecCon genTel genRecFields interactionPoints is
     doPrune x mv _A v u =
       case _A of
         _ | isOpen -> assign DirEq x (getArgs v) u
-        Nothing    -> equalSort (unwrapSort v) (unwrapSort u)
+        Nothing    -> equalSort RegardRelevance (unwrapSort v) (unwrapSort u)
         Just _A    -> equalTerm _A v u
       where
         isOpen = isOpenMeta $ mvInstantiation mv

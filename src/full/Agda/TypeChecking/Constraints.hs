@@ -227,7 +227,7 @@ solveConstraint_ (ValueCmpOnFace cmp p a u v) = compareTermOnFace cmp p a u v
 solveConstraint_ (ElimCmp cmp fs a e u v)   = compareElims cmp fs a e u v
 solveConstraint_ (TypeCmp cmp a b)          = compareType cmp a b
 solveConstraint_ (TelCmp a b cmp tela telb) = compareTel a b cmp tela telb
-solveConstraint_ (SortCmp cmp s1 s2)        = compareSort cmp s1 s2
+solveConstraint_ (SortCmp cmp rr s1 s2)     = compareSort cmp rr s1 s2
 solveConstraint_ (LevelCmp cmp a b)         = compareLevel cmp a b
 solveConstraint_ c0@(Guarded c pid)         = do
   ifM (isProblemSolved pid)

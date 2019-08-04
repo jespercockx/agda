@@ -350,7 +350,7 @@ data OutputConstraint a b
       | JustType b | CmpTypes Comparison b b
                    | CmpLevels Comparison b b
                    | CmpTeles Comparison b b
-      | JustSort b | CmpSorts Comparison b b
+      | JustSort b | CmpSorts Comparison RegardRelevance b b
       | Guard (OutputConstraint a b) ProblemId
       | Assign b a | TypedAssign b a a | PostponedCheckArgs b [a] a a
       | IsEmptyType a
@@ -380,7 +380,7 @@ outputFormId (OutputForm _ _ o) = out o
       CmpTypes _ i _             -> i
       CmpTeles _ i _             -> i
       JustSort i                 -> i
-      CmpSorts _ i _             -> i
+      CmpSorts _ _ i _           -> i
       Guard o _                  -> out o
       Assign i _                 -> i
       TypedAssign i _ _          -> i
@@ -418,7 +418,7 @@ instance Reify Constraint (OutputConstraint Expr Expr) where
     reify (LevelCmp cmp t t')    = CmpLevels cmp <$> reify t <*> reify t'
     reify (TypeCmp cmp t t')     = CmpTypes cmp <$> reify t <*> reify t'
     reify (TelCmp a b cmp t t')  = CmpTeles cmp <$> (ETel <$> reify t) <*> (ETel <$> reify t')
-    reify (SortCmp cmp s s')     = CmpSorts cmp <$> reify s <*> reify s'
+    reify (SortCmp cmp rr s s')  = CmpSorts cmp rr <$> reify s <*> reify s'
     reify (Guarded c pid) = do
         o  <- reify c
         return $ Guard o pid
@@ -489,7 +489,7 @@ instance (Pretty a, Pretty b) => Pretty (OutputConstraint a b) where
       CmpTypes  cmp t t'   -> pcmp cmp t t'
       CmpLevels cmp t t'   -> pcmp cmp t t'
       CmpTeles  cmp t t'   -> pcmp cmp t t'
-      CmpSorts cmp s s'    -> pcmp cmp s s'
+      CmpSorts cmp rr s s' -> pcmp cmp s s'
       Guard o pid          -> pretty o <?> brackets ("blocked by problem" <+> pretty pid)
       Assign m e           -> bin (pretty m) ":=" (pretty e)
       TypedAssign m e a    -> bin (pretty m) ":=" $ bin (pretty e) ":?" (pretty a)
@@ -529,8 +529,8 @@ instance (ToConcrete a c, ToConcrete b d) =>
     toConcrete (CmpLevels cmp e e') = CmpLevels cmp <$> toConcreteCtx argumentCtx_ e
                                                     <*> toConcreteCtx argumentCtx_ e'
     toConcrete (CmpTeles cmp e e') = CmpTeles cmp <$> toConcrete e <*> toConcrete e'
-    toConcrete (CmpSorts cmp e e') = CmpSorts cmp <$> toConcreteCtx argumentCtx_ e
-                                                  <*> toConcreteCtx argumentCtx_ e'
+    toConcrete (CmpSorts cmp rr e e') = CmpSorts cmp rr <$> toConcreteCtx argumentCtx_ e
+                                                        <*> toConcreteCtx argumentCtx_ e'
     toConcrete (Guard o pid) = Guard <$> toConcrete o <*> pure pid
     toConcrete (Assign m e) = noTakenNames $ Assign <$> toConcrete m <*> toConcreteCtx TopCtx e
     toConcrete (TypedAssign m e a) = TypedAssign <$> toConcrete m <*> toConcreteCtx TopCtx e

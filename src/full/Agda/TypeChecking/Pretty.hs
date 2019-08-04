@@ -277,7 +277,7 @@ instance PrettyTCM Constraint where
         LevelCmp cmp a b         -> prettyCmp (prettyTCM cmp) a b
         TypeCmp cmp a b          -> prettyCmp (prettyTCM cmp) a b
         TelCmp a b cmp tela telb -> prettyCmp (prettyTCM cmp) tela telb
-        SortCmp cmp s1 s2        -> prettyCmp (prettyTCM cmp) s1 s2
+        SortCmp cmp rr s1 s2     -> prettyCmp (prettyTCM cmp) s1 s2
         Guarded c pid            -> prettyTCM c <?> (brackets $ "blocked on problem" <+> prettyTCM pid)
         UnBlock m   -> do
             -- BlockedConst t <- mvInstantiation <$> lookupMeta m

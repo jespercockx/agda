@@ -115,13 +115,10 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
 
             -- when `--without-K`, all the indices should fit in the
             -- sort of the datatype (see #3420).
-            let s' = case s of
-                  Prop l -> Type l
-                  _      -> s
             -- Andreas, 2019-07-16, issue #3916:
             -- NoUniverseCheck should also disable the index sort check!
             unless (uc == NoUniverseCheck) $
-              whenM withoutKOption $ checkIndexSorts s' ixTel
+              whenM withoutKOption $ checkIndexSorts s ixTel
 
             reportSDoc "tc.data.sort" 20 $ vcat
               [ "checking datatype" <+> prettyTCM name
@@ -218,12 +215,7 @@ checkConstructor d uc tel nofIxs s con@(A.Axiom _ i ai Nothing c e) =
         -- is contained in the sort of the data type
         -- (to avoid impredicative existential types)
         debugFitsIn s
-        -- To allow propositional squash, we turn @Prop ℓ@ into @Set ℓ@
-        -- for the purpose of checking the type of the constructors.
-        let s' = case s of
-              Prop l -> Type l
-              _      -> s
-        arity <- traceCall (CheckConstructorFitsIn c t s') $ fitsIn uc forcedArgs t s'
+        arity <- traceCall (CheckConstructorFitsIn c t s) $ fitsIn uc forcedArgs t s
         -- this may have instantiated some metas in s, so we reduce
         s <- reduce s
         debugAdd c t
@@ -1097,11 +1089,11 @@ fitsIn uc forceds t s = do
       let (forced,forceds') = nextIsForced forceds
       unless (isForced forced && not withoutK) $ do
         sa <- reduce $ getSort dom
-        unless (isPath || uc == NoUniverseCheck || sa == SizeUniv) $ sa `leqSort` s
+        unless (isPath || uc == NoUniverseCheck || sa == SizeUniv) $ leqSort DisregardRelevance sa s
       addContext (absName b, dom) $ do
         succ <$> fitsIn uc forceds' (absBody b) (raise 1 s)
     _ -> do
-      getSort t `leqSort` s
+      leqSort RegardRelevance (getSort t) s
       return 0
 
 -- | When --without-K is enabled, we should check that the sorts of
@@ -1110,7 +1102,7 @@ checkIndexSorts :: Sort -> Telescope -> TCM ()
 checkIndexSorts s = \case
   EmptyTel -> return ()
   ExtendTel a tel' -> do
-    getSort a `leqSort` s
+    leqSort DisregardRelevance (getSort a) s
     underAbstraction a tel' $ checkIndexSorts (raise 1 s)
 
 -- | Return the parameters that share variables with the indices

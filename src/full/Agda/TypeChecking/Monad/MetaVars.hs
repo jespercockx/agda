@@ -253,7 +253,7 @@ constraintMetas c = metas c
       UnquoteTactic m t h g    -> return $ Set.fromList [x | Just x <- [m]] `Set.union` allMetas Set.singleton (t, h, g)
       Guarded c _              -> metas c
       TelCmp _ _ _ tel1 tel2   -> return $ allMetas Set.singleton (tel1, tel2)
-      SortCmp _ s1 s2          -> return $ allMetas Set.singleton (s1, s2)
+      SortCmp _ _ s1 s2        -> return $ allMetas Set.singleton (s1, s2)
       UnBlock x                -> Set.insert x . Set.unions <$> (mapM listenerMetas =<< getMetaListeners x)
       FindInstance{}           -> return mempty  -- v Ignore these constraints
       IsEmpty{}                -> return mempty

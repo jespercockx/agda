@@ -105,7 +105,7 @@ instance MentionsMeta Constraint where
     LevelCmp _ u v      -> mm (u, v)
     TypeCmp _ a b       -> mm (a, b)
     TelCmp a b _ u v    -> mm ((a, b), (u, v))
-    SortCmp _ a b       -> mm (a, b)
+    SortCmp _ _ a b     -> mm (a, b)
     Guarded{}           -> False  -- This gets woken up when the problem it's guarded by is solved
     UnBlock _           -> True   -- this might be a postponed typechecking
                                   -- problem and we don't have a handle on

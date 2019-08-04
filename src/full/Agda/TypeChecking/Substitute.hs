@@ -940,7 +940,7 @@ instance Subst Term Constraint where
     ElimCmp ps fs a v e1 e2  -> ElimCmp ps fs (rf a) (rf v) (rf e1) (rf e2)
     TypeCmp cmp a b          -> TypeCmp cmp (rf a) (rf b)
     TelCmp a b cmp tel1 tel2 -> TelCmp (rf a) (rf b) cmp (rf tel1) (rf tel2)
-    SortCmp cmp s1 s2        -> SortCmp cmp (rf s1) (rf s2)
+    SortCmp cmp rr s1 s2     -> SortCmp cmp rr (rf s1) (rf s2)
     LevelCmp cmp l1 l2       -> LevelCmp cmp (rf l1) (rf l2)
     Guarded c cs             -> Guarded (rf c) cs
     IsEmpty r a              -> IsEmpty r (rf a)

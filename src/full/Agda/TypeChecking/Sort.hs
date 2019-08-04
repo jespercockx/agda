@@ -69,7 +69,7 @@ inferUnivSort s = do
 sortFitsIn :: MonadConversion m => Sort -> Sort -> m ()
 sortFitsIn a b = do
   b' <- inferUnivSort a
-  equalSort b' b -- CUMULATIVITY: leqSort b' b
+  equalSort RegardRelevance b' b -- CUMULATIVITY: leqSort b' b
 
 hasBiggerSort :: Sort -> TCM ()
 hasBiggerSort = void . inferUnivSort
@@ -106,13 +106,13 @@ inferFunSort a s = inferPiSort a $ NoAbs underscore s
 ptsRule :: Dom Type -> Abs Sort -> Sort -> TCM ()
 ptsRule a b c = do
   c' <- inferPiSort a b
-  equalSort c' c -- CUMULATIVITY: leqSort c' c
+  equalSort RegardRelevance c' c -- CUMULATIVITY: leqSort c' c
 
 -- | Non-dependent version of ptsRule
 ptsRule' :: Dom Type -> Sort -> Sort -> TCM ()
 ptsRule' a b c = do
   c' <- inferFunSort a b
-  equalSort c' c -- CUMULATIVITY: leqSort c' c
+  equalSort RegardRelevance c' c -- CUMULATIVITY: leqSort c' c
 
 hasPTSRule :: Dom Type -> Abs Sort -> TCM ()
 hasPTSRule a b = void $ inferPiSort a b

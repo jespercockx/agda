@@ -208,7 +208,7 @@ instance Instantiate Constraint where
   instantiate' (LevelCmp cmp u v)   = uncurry (LevelCmp cmp) <$> instantiate' (u,v)
   instantiate' (TypeCmp cmp a b)    = uncurry (TypeCmp cmp) <$> instantiate' (a,b)
   instantiate' (TelCmp a b cmp tela telb) = uncurry (TelCmp a b cmp)  <$> instantiate' (tela,telb)
-  instantiate' (SortCmp cmp a b)    = uncurry (SortCmp cmp) <$> instantiate' (a,b)
+  instantiate' (SortCmp cmp rr a b) = uncurry (SortCmp cmp rr) <$> instantiate' (a,b)
   instantiate' (Guarded c pid)      = Guarded <$> instantiate' c <*> pure pid
   instantiate' (UnBlock m)          = return $ UnBlock m
   instantiate' (FindInstance m b args) = FindInstance m b <$> mapM instantiate' args
@@ -760,7 +760,7 @@ instance Reduce Constraint where
   reduce' (LevelCmp cmp u v)    = uncurry (LevelCmp cmp) <$> reduce' (u,v)
   reduce' (TypeCmp cmp a b)     = uncurry (TypeCmp cmp) <$> reduce' (a,b)
   reduce' (TelCmp a b cmp tela telb) = uncurry (TelCmp a b cmp)  <$> reduce' (tela,telb)
-  reduce' (SortCmp cmp a b)     = uncurry (SortCmp cmp) <$> reduce' (a,b)
+  reduce' (SortCmp cmp rr a b)  = uncurry (SortCmp cmp rr) <$> reduce' (a,b)
   reduce' (Guarded c pid)       = Guarded <$> reduce' c <*> pure pid
   reduce' (UnBlock m)           = return $ UnBlock m
   reduce' (FindInstance m b cands) = FindInstance m b <$> mapM reduce' cands
@@ -918,7 +918,7 @@ instance Simplify Constraint where
   simplify' (LevelCmp cmp u v)    = uncurry (LevelCmp cmp) <$> simplify' (u,v)
   simplify' (TypeCmp cmp a b)     = uncurry (TypeCmp cmp) <$> simplify' (a,b)
   simplify' (TelCmp a b cmp tela telb) = uncurry (TelCmp a b cmp) <$> simplify' (tela,telb)
-  simplify' (SortCmp cmp a b)     = uncurry (SortCmp cmp) <$> simplify' (a,b)
+  simplify' (SortCmp cmp rr a b)  = uncurry (SortCmp cmp rr) <$> simplify' (a,b)
   simplify' (Guarded c pid)       = Guarded <$> simplify' c <*> pure pid
   simplify' (UnBlock m)           = return $ UnBlock m
   simplify' (FindInstance m b cands) = FindInstance m b <$> mapM simplify' cands
@@ -1075,7 +1075,7 @@ instance Normalise Constraint where
   normalise' (LevelCmp cmp u v)    = uncurry (LevelCmp cmp) <$> normalise' (u,v)
   normalise' (TypeCmp cmp a b)     = uncurry (TypeCmp cmp) <$> normalise' (a,b)
   normalise' (TelCmp a b cmp tela telb) = uncurry (TelCmp a b cmp) <$> normalise' (tela,telb)
-  normalise' (SortCmp cmp a b)     = uncurry (SortCmp cmp) <$> normalise' (a,b)
+  normalise' (SortCmp cmp rr a b)  = uncurry (SortCmp cmp rr) <$> normalise' (a,b)
   normalise' (Guarded c pid)       = Guarded <$> normalise' c <*> pure pid
   normalise' (UnBlock m)           = return $ UnBlock m
   normalise' (FindInstance m b cands) = FindInstance m b <$> mapM normalise' cands
@@ -1286,7 +1286,7 @@ instance InstantiateFull Constraint where
     LevelCmp cmp u v    -> uncurry (LevelCmp cmp) <$> instantiateFull' (u,v)
     TypeCmp cmp a b     -> uncurry (TypeCmp cmp) <$> instantiateFull' (a,b)
     TelCmp a b cmp tela telb -> uncurry (TelCmp a b cmp) <$> instantiateFull' (tela,telb)
-    SortCmp cmp a b     -> uncurry (SortCmp cmp) <$> instantiateFull' (a,b)
+    SortCmp cmp rr a b  -> uncurry (SortCmp cmp rr) <$> instantiateFull' (a,b)
     Guarded c pid       -> Guarded <$> instantiateFull' c <*> pure pid
     UnBlock m           -> return $ UnBlock m
     FindInstance m b cands -> FindInstance m b <$> mapM instantiateFull' cands
