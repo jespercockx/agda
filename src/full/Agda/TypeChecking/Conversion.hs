@@ -1188,6 +1188,12 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
       (_       , Type (Max []))
         | not propEnabled  -> equalSort s1 s2
 
+      -- If @PiSort a b@ is below some rigid sort @Set l@ or @Prop l@,
+      -- we know that @b@ must also be below this rigid sort. We can
+      -- use this fact to hopefully solve some metavariables
+      (PiSort a b , Type l) -> piSortBelowRigid (Type l) a b
+      (PiSort a b , Prop l) -> piSortBelowRigid (Prop l) a b
+
       -- SizeUniv is unrelated to any @Set l@ or @Prop l@
       (SizeUniv, Type{}  ) -> no
       (SizeUniv, Prop{}  ) -> no
@@ -1214,6 +1220,13 @@ leqSort s1 s2 = (catchConstraint (SortCmp CmpLeq s1 s2) :: m () -> m ()) $ do
       (_      , DefS{}) -> no
 
   where
+  piSortBelowRigid s a bAbs = do
+    underAbstractionAbs a bAbs $ \b -> leqSort b (raise 1 s)
+    (a , bAbs) <- reduce (a , bAbs)
+    case piSort' a bAbs of
+      Just s' -> leqSort s' s
+      Nothing -> addConstraint $ SortCmp CmpLeq (PiSort a bAbs) s
+
   impossibleSort s = do
     reportS "impossible" 10
       [ "leqSort: found dummy sort with description:"
@@ -1568,16 +1581,15 @@ equalSort s1 s2 = do
             (Inf        , Type{}     )
               | typeInTypeEnabled      -> yes
 
-            -- if @PiSort a b == Set0@, then @b == Set0@
+            -- if @PiSort a b == Set l@, then @b =< Set l@
             -- we use this fact to solve metas in @b@,
             -- hopefully allowing the @PiSort@ to reduce.
-            (Type (Max []) , PiSort a b   )
-              | not propEnabled             -> piSortEqualsBottom set0 a b
-            (PiSort a b    , Type (Max []))
-              | not propEnabled             -> piSortEqualsBottom set0 a b
+            (Type l      , PiSort a b) -> piSortEqualsRigid (Type l) a b
+            (PiSort a b  , Type l    ) -> piSortEqualsRigid (Type l) a b
 
-            (Prop (Max []) , PiSort a b   ) -> piSortEqualsBottom prop0 a b
-            (PiSort a b    , Prop (Max [])) -> piSortEqualsBottom prop0 a b
+            -- Same for comparing @PiSort a b@ to @Prop l@
+            (Prop l      , PiSort a b) -> piSortEqualsRigid (Prop l) a b
+            (PiSort a b  , Prop l    ) -> piSortEqualsRigid (Prop l) a b
 
             -- @PiSort a b == SizeUniv@ iff @b == SizeUniv@
             (SizeUniv   , PiSort a b ) ->
@@ -1585,8 +1597,10 @@ equalSort s1 s2 = do
             (PiSort a b , SizeUniv   ) ->
               underAbstraction a b $ equalSort SizeUniv
 
-            -- @Prop0@ and @SizeUniv@ don't contain any universes,
+            -- @Set0@, @Prop0@ and @SizeUniv@ don't contain any universes,
             -- so they cannot be a UnivSort
+            (Type (Max []) , UnivSort s )   -> no
+            (UnivSort s    , Type (Max [])) -> no
             (Prop (Max []) , UnivSort s )   -> no
             (UnivSort s    , Prop (Max [])) -> no
             (SizeUniv      , UnivSort s )   -> no
@@ -1612,18 +1626,15 @@ equalSort s1 s2 = do
         reportSDoc "tc.meta.sort" 50 $ "meta" <+> sep [pretty x, prettyList $ map pretty es, pretty s]
         assignE DirEq x es (Sort s) __IMPOSSIBLE__
 
-      set0 = Type $ Max []
-      prop0 = Prop $ Max []
-
-      -- equate @piSort a b@ to @s0@, which is assumed to be a (closed) bottom sort
-      -- i.e. @piSort a b == s0@ implies @b == s0@.
-      piSortEqualsBottom s0 a b = do
-        underAbstraction a b $ equalSort s0
-        -- we may have instantiated some metas, so @a@ could reduce
-        a <- reduce a
-        case funSort' a s0 of
-          Just s  -> equalSort s s0
-          Nothing -> addConstraint $ SortCmp CmpEq (funSort a s0) s0
+      -- equate @piSort a b@ to @s@, which is assumed to be either
+      -- @Set l@ or @Prop l@, in which case we know @b =< s@.
+      piSortEqualsRigid s a bAbs = do
+        underAbstractionAbs a bAbs $ \b -> b `leqSort` (raise 1 s)
+        -- we may have instantiated some metas, so @a@ or @bAbs@ could reduce
+        (a , bAbs) <- reduce (a , bAbs)
+        case piSort' a bAbs of
+          Just s' -> equalSort s s'
+          Nothing -> addConstraint $ SortCmp CmpEq (PiSort a bAbs) s
       impossibleSort s = do
         reportS "impossible" 10
           [ "equalSort: found dummy sort with description:"
