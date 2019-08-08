@@ -3164,7 +3164,7 @@ data TypeError
         | VariableIsIrrelevant Name
         | VariableIsErased Name
         | VariableIsOfUnusableCohesion Name Cohesion
---        | UnequalLevel Comparison Term Term  -- UNUSED
+        | UnequalLevel Comparison Level Level
         | UnequalTerms Comparison Term Term Type
         | UnequalTypes Comparison Type Type
 --      | UnequalTelescopes Comparison Telescope Telescope -- UNUSED

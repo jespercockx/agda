@@ -1152,6 +1152,7 @@ leqSort rr s1 s2 = (catchConstraint (SortCmp CmpLeq rr s1 s2) :: m () -> m ()) $
   let postpone = addConstraint (SortCmp CmpLeq rr s1 s2)
       no       = typeError $ NotLeqSort s1 s2
       yes      = return ()
+      try m    = m `catchError` \_ -> no
   reportSDoc "tc.conv.sort" 30 $
     sep [ "leqSort"
         , nest 2 $ fsep [ prettyTCM s1 <+> "=<"
@@ -1168,18 +1169,18 @@ leqSort rr s1 s2 = (catchConstraint (SortCmp CmpLeq rr s1 s2) :: m () -> m ()) $
       (_, DummyS s) -> impossibleSort s
 
       -- The most basic rule: @Set l =< Set l'@ iff @l =< l'@
-      (Type a  , Type b  ) -> leqLevel a b
+      (Type a  , Type b  ) -> try $ leqLevel a b
 
       -- Likewise for @Prop@
-      (Prop a  , Prop b  ) -> leqLevel a b
+      (Prop a  , Prop b  ) -> try $ leqLevel a b
 
       -- Currently, we don't have subtyping @Prop l =< Set l@. This
       -- may change in the future.
       (Prop a  , Type b  )
-        | rr == DisregardRelevance -> leqLevel a b
+        | rr == DisregardRelevance -> try $ leqLevel a b
         | otherwise                -> no
       (Type a  , Prop b  )
-        | rr == DisregardRelevance -> leqLevel a b
+        | rr == DisregardRelevance -> try $ leqLevel a b
         | otherwise                -> no
 
       -- Setω is the top sort
@@ -1332,7 +1333,7 @@ leqLevel a b = do
         _ -> postpone
       where
         ok       = return ()
-        notok    = unlessM typeInType $ typeError $ NotLeqSort (Type a) (Type b)
+        notok    = unlessM typeInType $ typeError $ UnequalLevel CmpLeq a b
         postpone = patternViolation
 
         wrap m = catchError m $ \e ->
@@ -1470,7 +1471,7 @@ equalLevel' a b = do
 
         ok       = return ()
         notok    = unlessM typeInType notOk
-        notOk    = typeError $ UnequalSorts (Type a) (Type b)
+        notOk    = typeError $ UnequalLevel CmpEq a b
         postpone = do
           reportSDoc "tc.conv.level" 30 $ hang "postponing:" 2 $ hang (pretty a <+> "==") 0 (pretty b)
           patternViolation
@@ -1542,6 +1543,8 @@ equalSort rr s1 s2 = do
               ((s1,s2) , equal) <- SynEq.checkSyntacticEquality s1 s2
               if | equal     -> yes
                  | otherwise -> postpone
+            try m = m `catchError` \_ -> no
+
 
         reportSDoc "tc.conv.sort" 30 $ sep
           [ "equalSort"
@@ -1576,18 +1579,18 @@ equalSort rr s1 s2 = do
             (UnivSort{}  , UnivSort{} ) -> synEq
 
             -- diagonal cases for rigid sorts
-            (Type a     , Type b     ) -> equalLevel a b
+            (Type a     , Type b     ) -> try $ equalLevel a b
             (SizeUniv   , SizeUniv   ) -> yes
-            (Prop a     , Prop b     ) -> equalLevel a b
+            (Prop a     , Prop b     ) -> try $ equalLevel a b
             (Inf        , Inf        ) -> yes
 
             -- when @rr = DisregardRelevance@ (e.g. for checking that
             -- the sort of a constructor argument fits in the sort of
             -- the datatype), we consider @Prop@ and @Set@ as the same
             (Type a     , Prop b     )
-              | rr == DisregardRelevance -> equalLevel a b
+              | rr == DisregardRelevance -> try $ equalLevel a b
             (Prop a     , Type b     )
-              | rr == DisregardRelevance -> equalLevel a b
+              | rr == DisregardRelevance -> try $ equalLevel a b
 
             -- if --type-in-type is enabled, Setω is equal to any Set ℓ (see #3439)
             (Type{}     , Inf        )
