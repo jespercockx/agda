@@ -598,7 +598,8 @@ unpackSub con infos i = recSub
   where
     ar = length infos
     appl info v = Apply (Arg info v)
-    recVal = Con con ConOSystem $ zipWith appl infos $ [var j | j <- [i - 1, i - 2..0]] ++ replicate (ar - i) __DUMMY_TERM__
+    recVal = Con con ConOSystem $ zipWith appl infos $ [var j | j <- [i - 1, i - 2..0]]
+      ++ replicate (ar - i) (Dummy (show i) [])
 
     -- want: Γ Δᵢ ⊢ recSub i : Γ (r : R)
     -- have:
