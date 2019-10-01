@@ -337,6 +337,17 @@ addCompositionForRecord
   -> Type        -- ^ @Γ ⊢ T@ target type.
   -> TCM ()
 addCompositionForRecord name con tel fs ftel rect = do
+  reportSDoc "tc.cubical.comp" 20 $ vcat
+    [ "addCompositionForRecord"
+    , nest 2 $ vcat
+      [ "name = " <+> prettyTCM name
+      , "con  = " <+> prettyTCM con
+      , "tel  = " <+> prettyTCM tel
+      , "fs   = " <+> prettyList_ (map (prettyTCM . unArg) fs)
+      , "ftel = " <+> addContext tel (prettyTCM ftel)
+      , "rect = " <+> addContext tel (prettyTCM rect)
+      ]
+    ]
   cxt <- getContextTelescope
   inTopContext $ do
 
@@ -367,6 +378,16 @@ defineCompKitR ::
   -> Type        -- ^ record type Δ ⊢ T
   -> TCM CompKit
 defineCompKitR name params fsT fns rect = do
+  reportSDoc "tc.cubical.comp" 20 $ vcat
+    [ "defineCompKitR"
+    , nest 2 $ vcat
+      [ "name = " <+> prettyTCM name
+      , "params = " <+> prettyTCM params
+      , "fsT = " <+> addContext params (prettyTCM fsT)
+      , "fns = " <+> prettyList_ (map (prettyTCM . unArg) fns)
+      , "rect = " <+> addContext params (prettyTCM rect)
+      ]
+    ]
   required <- mapM getTerm'
         [ builtinInterval
         , builtinIZero
@@ -377,9 +398,6 @@ defineCompKitR name params fsT fns rect = do
         , builtinPOr
         , builtinItIsOne
         ]
-  reportSDoc "tc.rec.cxt" 30 $ prettyTCM params
-  reportSDoc "tc.rec.cxt" 30 $ prettyTCM fsT
-  reportSDoc "tc.rec.cxt" 30 $ pretty rect
   if not $ all isJust required then return $ emptyCompKit else do
     transp <- whenDefined [builtinTrans]              (defineTranspOrHCompR DoTransp name params fsT fns rect)
     hcomp  <- whenDefined [builtinTrans,builtinHComp] (defineTranspOrHCompR DoHComp name params fsT fns rect)
@@ -402,6 +420,17 @@ defineTranspOrHCompR ::
   -> Type        -- ^ record type Δ ⊢ T
   -> TCM (Maybe QName)
 defineTranspOrHCompR cmd name params fsT fns rect = do
+  reportSDoc "tc.cubical" 20 $ vcat
+    [ "defineTranspOrHCompR"
+    , nest 2 $ vcat
+      [ "cmd    = " <+> text (show cmd)
+      , "name   = " <+> prettyTCM name
+      , "params = " <+> prettyTCM params
+      , "fsT    = " <+> addContext params (prettyTCM fsT)
+      , "fns    = " <+> prettyList_ (map (prettyTCM . unArg) fns)
+      , "rect   = " <+> addContext params (prettyTCM rect)
+      ]
+    ]
   let project = (\ t fn -> t `applyE` [Proj ProjSystem fn])
   stuff <- fmap fst <$> defineTranspOrHCompForFields cmd Nothing project name params fsT fns rect
 

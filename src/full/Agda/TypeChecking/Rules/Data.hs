@@ -335,6 +335,18 @@ defineCompData :: QName      -- datatype name
                -> Boundary   -- [(i,t_i,b_i)],  Γ.Φ ⊢ [ (i=0) -> t_i; (i=1) -> u_i ] : B_i
                -> TCM CompKit
 defineCompData d con params names fsT t boundary = do
+  reportSDoc "tc.cubical" 20 $ vcat
+    [ "defineCompData"
+    , nest 2 $ vcat
+      [ "d        = " <+> prettyTCM d
+      , "con      = " <+> prettyTCM con
+      , "params   = " <+> prettyTCM params
+      , "names    = " <+> prettyList_ (map prettyTCM names)
+      , "fsT      = " <+> addContext params (prettyTCM fsT)
+      , "t        = " <+> addContext params (prettyTCM t)
+      , "boundary = " <+> "(not printed)"
+      ]
+    ]
   required <- mapM getTerm'
     [ builtinInterval
     , builtinIZero
@@ -659,8 +671,21 @@ defineTranspOrHCompForFields
   -> [Arg QName] -- ^ fields' names
   -> Type        -- ^ record type Δ ⊢ T
   -> TCM (Maybe ((QName, Telescope, Type, [Dom Type], [Term]), Substitution))
-defineTranspOrHCompForFields cmd pathCons project name params fsT fns rect =
-   case cmd of
+defineTranspOrHCompForFields cmd pathCons project name params fsT fns rect = do
+  reportSDoc "tc.cubical" 20 $ vcat
+    [ "defineTranspOrHCompForFields"
+    , nest 2 $ vcat
+      [ "cmd       = " <+> text (show cmd)
+      , "pathCons  = " <+> maybe (text "(nothing)") prettyTCM pathCons
+      , "project   = " <+> "(not printed)"
+      , "name      = " <+> prettyTCM name
+      , "params    = " <+> prettyTCM params
+      , "fsT       = " <+> addContext params (prettyTCM fsT)
+      , "fns       = " <+> prettyList_ (map (prettyTCM . unArg) fns)
+      , "rect      = " <+> addContext params (prettyTCM rect)
+      ]
+    ]
+  case cmd of
        DoTransp -> runMaybeT $ do
          fsT' <- traverse (traverse (MaybeT . toCType)) fsT
          lift $ defineTranspForFields pathCons project name params fsT' fns rect
@@ -682,6 +707,18 @@ defineTranspForFields
   -> Type        -- ^ record type Δ ⊢ T
   -> TCM ((QName, Telescope, Type, [Dom Type], [Term]), Substitution)
 defineTranspForFields pathCons applyProj name params fsT fns rect = do
+  reportSDoc "tc.cubical" 20 $ vcat
+    [ "defineTranspForFields"
+    , nest 2 $ vcat
+      [ "pathCons  = " <+> maybe (text "(nothing)") prettyTCM pathCons
+      , "applyProj = " <+> "(not printed)"
+      , "name      = " <+> prettyTCM name
+      , "params    = " <+> prettyTCM params
+      , "fsT       = " <+> "(not printed)" --addContext params (prettyTCM fsT)
+      , "fns       = " <+> prettyList_ (map (prettyTCM . unArg) fns)
+      , "rect      = " <+> addContext params (prettyTCM rect)
+      ]
+    ]
   interval <- elInf primInterval
   let deltaI = expTelescope interval params
   iz <- primIZero
@@ -845,6 +882,17 @@ defineHCompForFields
   -> LType        -- ^ record type (δ : Δ) ⊢ R[δ]
   -> TCM ((QName, Telescope, Type, [Dom Type], [Term]),Substitution)
 defineHCompForFields applyProj name params fsT fns rect = do
+  reportSDoc "tc.cubical" 20 $ vcat
+    [ "defineHCompForFields"
+    , nest 2 $ vcat
+      [ "applyProj = " <+> "(not printed)"
+      , "name      = " <+> prettyTCM name
+      , "params    = " <+> prettyTCM params
+      , "fsT       = " <+> "(not printed)" --addContext params (prettyTCM fsT)
+      , "fns       = " <+> prettyList_ (map (prettyTCM . unArg) fns)
+      , "rect      = " <+> "(not printed)" --addContext params (prettyTCM rect)
+      ]
+    ]
   interval <- elInf primInterval
   let delta = params
   iz <- primIZero
