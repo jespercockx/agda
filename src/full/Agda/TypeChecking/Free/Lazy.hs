@@ -534,10 +534,7 @@ instance Free Term where
     Dummy{}      -> mempty
 
 instance Free t => Free (Type' t) where
-  freeVars' (El s t) =
-    ifM ((IgnoreNot ==) <$> asks feIgnoreSorts)
-      {- then -} (freeVars' (s, t))
-      {- else -} (freeVars' t)
+  freeVars' (El s t) = freeVars' t
 
 instance Free Sort where
   freeVars' s =
@@ -548,7 +545,7 @@ instance Free Sort where
       Inf        -> mempty
       SizeUniv   -> mempty
       PiSort a s -> underFlexRig (Flexible mempty) (freeVars' $ unDom a) `mappend`
-                    underFlexRig WeaklyRigid (freeVars' (getSort a, s))
+                    underFlexRig WeaklyRigid (freeVars' (fst $ unDom a, s))
       UnivSort s -> underFlexRig WeaklyRigid $ freeVars' s
       MetaS x es -> underFlexRig (Flexible $ singleton x) $ freeVars' es
       DefS _ es  -> underFlexRig WeaklyRigid $ freeVars' es
@@ -601,4 +598,4 @@ instance Free Clause where
 
 instance Free EqualityView where
   freeVars' (OtherType t) = freeVars' t
-  freeVars' (EqualityType s _eq l t a b) = freeVars' (s, l, [t, a, b])
+  freeVars' (EqualityType s _eq l t a b) = freeVars' (l, [t, a, b])

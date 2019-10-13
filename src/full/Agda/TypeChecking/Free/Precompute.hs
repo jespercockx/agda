@@ -101,7 +101,7 @@ instance PrecomputeFreeVars LevelAtom where
       UnreducedLevel t -> UnreducedLevel <$> precomputeFreeVars t
 
 instance PrecomputeFreeVars Type where
-  precomputeFreeVars (El s t) = uncurry El <$> precomputeFreeVars (s, t)
+  precomputeFreeVars (El s t) = El () <$> precomputeFreeVars t
 
 -- Note: don't use default instance, since that bypasses the 'Arg' in 'Apply'.
 instance PrecomputeFreeVars a => PrecomputeFreeVars (Elim' a) where

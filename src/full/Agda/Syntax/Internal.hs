@@ -252,7 +252,7 @@ instance Decoration Abs where
 
 -- | Types are terms with a sort annotation.
 --
-data Type'' t a = El { _getSort :: Sort' t, unEl :: a }
+data Type'' t a = El { _getSort :: (), unEl :: a }
   deriving (Data, Show, Functor, Foldable, Traversable)
 
 type Type' a = Type'' Term a
@@ -266,9 +266,6 @@ class LensSort a where
   lensSort ::  Lens' Sort a
   getSort  :: a -> Sort
   getSort a = a ^. lensSort
-
-instance LensSort (Type' a) where
-  lensSort f (El s a) = f s <&> \ s' -> El s' a
 
 -- General instance leads to overlapping instances.
 -- instance (Decoration f, LensSort a) => LensSort (f a) where
@@ -294,7 +291,7 @@ data Sort' t
   | Prop (Level' t)  -- ^ @Prop ℓ@.
   | Inf         -- ^ @Setω@.
   | SizeUniv    -- ^ @SizeUniv@, a sort inhabited by type @Size@.
-  | PiSort (Dom' t (Type'' t t)) (Abs (Sort' t)) -- ^ Sort of the pi type.
+  | PiSort (Dom' t (Sort' t , Type'' t t)) (Abs (Sort' t)) -- ^ Sort of the pi type.
   | UnivSort (Sort' t) -- ^ Sort of another sort.
   | MetaS {-# UNPACK #-} !MetaId [Elim' t]
   | DefS QName [Elim' t] -- ^ A postulated sort.
@@ -758,7 +755,7 @@ instance Null (Substitution' a) where
 
 data EqualityView
   = EqualityType
-    { eqtSort  :: Sort     -- ^ Sort of this type.
+    { eqtSort  :: ()       -- ^ Sort of this type.
     , eqtName  :: QName    -- ^ Builtin EQUALITY.
     , eqtParams :: [Arg Term] -- ^ Hidden.  Empty or @Level@.
     , eqtType  :: Arg Term -- ^ Hidden
@@ -775,7 +772,7 @@ isEqualityType OtherType{}    = False
 
 data PathView
   = PathType
-    { pathSort  :: Sort     -- ^ Sort of this type.
+    { pathSort  :: ()       -- ^ Sort of this type.
     , pathName  :: QName    -- ^ Builtin PATH.
     , pathLevel :: Arg Term -- ^ Hidden
     , pathType  :: Arg Term -- ^ Hidden
@@ -867,7 +864,7 @@ __DUMMY_SORT__ = withFileAndLine' (freezeCallStack callStack) dummySort
 -- | A dummy type created at location.
 --   Note: use macro __DUMMY_TYPE__ !
 dummyType :: String -> Int -> Type
-dummyType file line = El (DummyS "") $ dummyTerm' ("dummyType: " ++ file) line
+dummyType file line = El () $ dummyTerm' ("dummyType: " ++ file) line
 
 __DUMMY_TYPE__ :: HasCallStack => Type
 __DUMMY_TYPE__ = withFileAndLine' (freezeCallStack callStack) dummyType
@@ -895,7 +892,7 @@ topSort :: Type
 topSort = sort Inf
 
 sort :: Sort -> Type
-sort s = El (UnivSort s) $ Sort s
+sort s = El () $ Sort s
 
 varSort :: Int -> Sort
 varSort n = Type $ atomicLevel $ NeutralLevel mempty $ var n

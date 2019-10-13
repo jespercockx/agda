@@ -31,7 +31,7 @@ import Data.List
 import Agda.Syntax.Common hiding (Nat)
 import Agda.Syntax.Internal
 
-import Agda.TypeChecking.Monad hiding (getConstInfo, typeOfConst)
+import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Free
@@ -41,6 +41,10 @@ import Agda.Utils.Fail (Fail, runFail_)
 
 instance HasBuiltins m => HasBuiltins (NamesT m) where
   getBuiltinThing b = lift $ getBuiltinThing b
+
+instance HasConstInfo m => HasConstInfo (NamesT m) where
+  getConstInfo q = lift $ getConstInfo q
+  getRewriteRulesFor q = lift $ getRewriteRulesFor q
 
 newtype NamesT m a = NamesT { unName :: ReaderT Names m a }
   deriving ( Functor

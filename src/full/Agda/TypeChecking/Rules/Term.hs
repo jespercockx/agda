@@ -98,38 +98,42 @@ isType' :: Comparison -> A.Expr -> Sort -> TCM Type
 isType' c e s =
     traceCall (IsTypeCall c e s) $ do
     v <- checkExpr' c e (sort s)
-    return $ El s v
+    return $ El () v
 
 -- | Check that an expression is a type and infer its (minimal) sort.
-isType_ :: A.Expr -> TCM Type
+isType_ :: A.Expr -> TCM (Sort , Type)
 isType_ e = traceCall (IsType_ e) $ do
-  let fallback = isType' CmpEq e =<< do workOnTypes $ newSortMeta
+  let fallback = do
+        s <- workOnTypes $ newSortMeta
+        t <- isType' CmpEq e s
+        return (s , t)
   case unScope e of
     A.Fun i (Arg info t) b -> do
-      a <- setArgInfo info . defaultDom <$> isType_ t
-      b <- isType_ b
-      s <- inferFunSort a (getSort b)
-      let t' = El s $ Pi a $ NoAbs underscore b
-      noFunctionsIntoSize b t'
-      return t'
+      a <- setArgInfo info . defaultDom . snd <$> isType_ t
+      (sb , b) <- isType_ b
+      s <- inferFunSort a sb
+      let t' = El () $ Pi a $ NoAbs underscore b
+      noFunctionsIntoSize s t'
+      return (s , t')
     A.Pi _ tel e | null tel -> isType_ e
     A.Pi _ tel e -> do
-      (t0, t') <- checkPiTelescope tel $ \ tel -> do
-        t0  <- instantiateFull =<< isType_ e
+      t' <- checkPiTelescope tel $ \ tel -> do
+        t0  <- instantiateFull =<< snd <$> isType_ e
         tel <- instantiateFull tel
-        return (t0, telePi tel t0)
+        return $ telePi tel t0
+      s <- sortOf $ unEl t'
+      noFunctionsIntoSize s t'
       checkTelePiSort t'
-      noFunctionsIntoSize t0 t'
-      return t'
+      return (s , t')
 
     -- Setᵢ
     A.Set _ n -> do
-      return $ sort (mkType n)
+      return (mkType (n+1) , sort (mkType n))
 
     -- Propᵢ
     A.Prop _ n -> do
       unlessM isPropEnabled $ typeError NeedOptionProp
-      return $ sort (mkProp n)
+      return (mkType (n+1) , sort (mkProp n))
 
     -- Set ℓ
     A.App i s arg
@@ -139,8 +143,8 @@ isType_ e = traceCall (IsType_ e) $ do
         "Use --universe-polymorphism to enable level arguments to Set"
       -- allow NonStrict variables when checking level
       --   Set : (NonStrict) Level -> Set\omega
-      applyRelevanceToContext NonStrict $
-        sort . Type <$> checkLevel arg
+      l <- applyRelevanceToContext NonStrict $ checkLevel arg
+      return (Type (levelSuc l) , sort (Type l))
 
     -- Prop ℓ
     A.App i s arg
@@ -149,8 +153,8 @@ isType_ e = traceCall (IsType_ e) $ do
       unlessM isPropEnabled $ typeError NeedOptionProp
       unlessM hasUniversePolymorphism $ genericError
         "Use --universe-polymorphism to enable level arguments to Prop"
-      applyRelevanceToContext NonStrict $
-        sort . Prop <$> checkLevel arg
+      l <- applyRelevanceToContext NonStrict $ checkLevel arg
+      return (Type (levelSuc l) , sort (Prop l))
 
     -- Issue #707: Check an existing interaction point
     A.QuestionMark minfo ii -> caseMaybeM (lookupInteractionMeta ii) fallback $ \ x -> do
@@ -182,7 +186,7 @@ isType_ e = traceCall (IsType_ e) $ do
         [ "  s1   = " <+> text (show s1)
         ]
       case unEl s1 of
-        Sort s -> return $ El s $ MetaV x $ map Apply vs
+        Sort s -> return (s , El () $ MetaV x $ map Apply vs)
         _ -> __IMPOSSIBLE__
 
     _ -> fallback
@@ -193,25 +197,20 @@ checkLevel arg = do
   levelView =<< checkNamedArg arg lvl
 
 -- | Ensure that a (freshly created) function type does not inhabit 'SizeUniv'.
---   Precondition:  When @noFunctionsIntoSize t tBlame@ is called,
---   we are in the context of @tBlame@ in order to print it correctly.
---   Not being in context of @t@ should not matter, as we are only
---   checking whether its sort reduces to 'SizeUniv'.
-noFunctionsIntoSize :: Type -> Type -> TCM ()
-noFunctionsIntoSize t tBlame = do
+noFunctionsIntoSize :: Sort -> Type -> TCM ()
+noFunctionsIntoSize s t = do
   reportSDoc "tc.fun" 20 $ do
-    let El s (Pi dom b) = tBlame
-    sep [ "created function type " <+> prettyTCM tBlame
-        , "with pts rule (" <+> prettyTCM (getSort dom) <+>
-                        "," <+> underAbstraction_ b (prettyTCM . getSort) <+>
-                        "," <+> prettyTCM s <+> ")"
+    let El _ (Pi dom b) = t
+    sep [ "created function type " <+> prettyTCM t
+        , "with pts rule (" <+> (prettyTCM =<< sortOf (unEl $ unDom dom)) <+>
+                        "," <+> underAbstraction_ b (prettyTCM <=< (sortOf . unEl)) <+>
+                        "," <+> (prettyTCM =<< sortOf (Pi dom b)) <+> ")"
         ]
-  s <- reduce $ getSort t
   when (s == SizeUniv) $ do
     -- Andreas, 2015-02-14
     -- We have constructed a function type in SizeUniv
     -- which is illegal to prevent issue 1428.
-    typeError $ FunctionTypeInSizeUniv $ unEl tBlame
+    typeError $ FunctionTypeInSizeUniv $ unEl t
 
 -- | Check that an expression is a type which is equal to a given type.
 isTypeEqualTo :: A.Expr -> Type -> TCM Type
@@ -219,7 +218,7 @@ isTypeEqualTo e0 t = scopedExpr e0 >>= \case
   A.ScopedExpr{} -> __IMPOSSIBLE__
   A.Underscore i | A.metaNumber i == Nothing -> return t
   e -> workOnTypes $ do
-    t' <- isType e (getSort t)
+    t' <- snd <$> isType_ e
     t' <$ leqType t t'
 
 leqType_ :: Type -> Type -> TCM ()
@@ -230,7 +229,15 @@ leqType_ t t' = workOnTypes $ leqType t t'
 ---------------------------------------------------------------------------
 
 checkGeneralizeTelescope :: A.GeneralizeTelescope -> ([Maybe Name] -> Telescope -> TCM a) -> TCM a
-checkGeneralizeTelescope (A.GeneralizeTel vars tel) k =
+checkGeneralizeTelescope (A.GeneralizeTel vars tel) k = do
+  reportSDoc "tc.term" 20 $ vcat
+    [ "checkGeneralizeTelescope"
+    , nest 2 $ vcat $
+      [ "vars = " <+> prettyList_ (map (\(x,y) -> prettyTCM x <+> "|->" <+> prettyTCM y) $ Map.toList vars)
+        | not (null vars)
+        ] ++
+      [ "tel  = " <+> prettyTCM tel ]
+    ]
   generalizeTelescope vars (checkTelescope tel) k
 
 -- | Type check a (module) telescope.
@@ -283,7 +290,7 @@ checkTypedBindings lamOrPi (A.TBind r tac xps e) ret = do
         c = headWithDefault __IMPOSSIBLE__ cs
     unless (all (c ==) cs) $ __IMPOSSIBLE__
 
-    t <- applyCohesionToContext c $ modEnv lamOrPi $ isType_ e
+    t <- applyCohesionToContext c $ modEnv lamOrPi $ snd <$> isType_ e
 
     -- Jesper, 2019-02-12, Issue #3534: warn if the type of an
     -- instance argument does not have the right shape
@@ -406,7 +413,7 @@ checkLambda cmp b@(A.TBind _ _ xps typ) body target = do
       verboseS "tc.term.lambda" 5 $ tick "lambda-no-target-type"
 
       -- First check that argsT is a valid type
-      argsT <- workOnTypes $ isType_ typ
+      argsT <- workOnTypes $ snd <$> isType_ typ
       -- Andreas, 2015-05-28 Issue 1523
       -- If argsT is a SizeLt, it must be non-empty to avoid non-termination.
       -- TODO: do we need to block checkExpr?
@@ -898,18 +905,7 @@ checkRecordExpression cmp mfs e t = do
           let rt = defType def
           vs  <- newArgsMeta rt
           target <- reduce $ piApply rt vs
-          s  <- case unEl target of
-                  Sort s  -> return s
-                  v       -> do
-                    reportSDoc "impossible" 10 $ vcat
-                      [ "The impossible happened when checking record expression against meta"
-                      , "Candidate record type r = " <+> prettyTCM r
-                      , "Type of r               = " <+> prettyTCM rt
-                      , "Ends in (should be sort)= " <+> prettyTCM v
-                      , text $ "  Raw                   =  " ++ show v
-                      ]
-                    __IMPOSSIBLE__
-          let inferred = El s $ Def r $ map Apply vs
+          let inferred = El () $ Def r $ map Apply vs
           v <- checkExpr e inferred
           coerce cmp v inferred t
           -- Andreas 2012-04-21: OLD CODE, WRONG DIRECTION, I GUESS:
@@ -1078,14 +1074,14 @@ checkExpr' cmp e t0 =
         A.Let i ds e -> checkLetBindings ds $ checkExpr' cmp e t
         A.Pi _ tel e | null tel -> checkExpr' cmp e t
         A.Pi _ tel e -> do
-            (t0, t') <- checkPiTelescope tel $ \ tel -> do
-                    t0  <- instantiateFull =<< isType_ e
+            t' <- checkPiTelescope tel $ \ tel -> do
+                    t0  <- instantiateFull =<< snd <$> isType_ e
                     tel <- instantiateFull tel
-                    return (t0, telePi tel t0)
+                    return $ telePi tel t0
+            let v = unEl t'
+            s <- sortOf v
+            noFunctionsIntoSize s t'
             checkTelePiSort t'
-            noFunctionsIntoSize t0 t'
-            let s = getSort t'
-                v = unEl t'
             when (s == Inf) $ reportSDoc "tc.term.sort" 20 $
               vcat [ text ("reduced to omega:")
                    , nest 2 $ "t   =" <+> prettyTCM t'
@@ -1094,10 +1090,13 @@ checkExpr' cmp e t0 =
             coerce cmp v (sort s) t
 
         A.Generalized s e -> do
-            (_, t') <- generalizeType s $ isType_ e
-            noFunctionsIntoSize t' t'
-            let s = getSort t'
-                v = unEl t'
+            (mns , t') <- generalizeType s $ do
+              (s , t') <- isType_ e
+              noFunctionsIntoSize s t'
+              return t'
+            let v = unEl t'
+            s <- sortOf v -- TODO: return sort of generalized type
+                          -- directly from 'generalizeType'
             when (s == Inf) $ reportSDoc "tc.term.sort" 20 $
               vcat [ text ("reduced to omega:")
                    , nest 2 $ "t   =" <+> prettyTCM t'
@@ -1106,12 +1105,12 @@ checkExpr' cmp e t0 =
             coerce cmp v (sort s) t
 
         A.Fun _ (Arg info a) b -> do
-            a' <- isType_ a
+            (sa , a') <- isType_ a
             let adom = defaultArgDom info a'
-            b' <- isType_ b
-            s  <- inferFunSort adom (getSort b')
+            (sb , b') <- isType_ b
+            s  <- inferFunSort adom sb
             let v = Pi adom (NoAbs underscore b')
-            noFunctionsIntoSize b' $ El s v
+            noFunctionsIntoSize s (El () v)
             coerce cmp v (sort s) t
         A.Set _ n    -> do
           coerce cmp (Sort $ mkType n) (sort $ mkType $ n + 1) t
@@ -1497,7 +1496,7 @@ checkLetBinding :: A.LetBinding -> TCM a -> TCM a
 
 checkLetBinding b@(A.LetBind i info x t e) ret =
   traceCall (CheckLetBinding b) $ do
-    t <- isType_ t
+    (st , t) <- isType_ t
     v <- applyModalityToContext info $ checkDontExpandLast CmpLeq e t
     addLetBinding info (A.unBind x) v t ret
 
@@ -1506,7 +1505,7 @@ checkLetBinding b@(A.LetPatBind i p e) ret =
     p <- expandPatternSynonyms p
     (v, t) <- inferExpr' ExpandLast e
     let -- construct a type  t -> dummy  for use in checkLeftHandSide
-        t0 = El (getSort t) $ Pi (defaultDom t) (NoAbs underscore __DUMMY_TYPE__)
+        t0 = El () $ Pi (defaultDom t) (NoAbs underscore __DUMMY_TYPE__)
         p0 = Arg defaultArgInfo (Named Nothing p)
     reportSDoc "tc.term.let.pattern" 10 $ vcat
       [ "let-binding pattern p at type t"

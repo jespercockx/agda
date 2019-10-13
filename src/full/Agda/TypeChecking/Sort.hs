@@ -34,6 +34,8 @@ import Agda.Syntax.Internal
 import {-# SOURCE #-} Agda.TypeChecking.Constraints () -- instance only
 import {-# SOURCE #-} Agda.TypeChecking.Conversion
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars () -- instance only
+import {-# SOURCE #-} Agda.TypeChecking.ProjectionLike (elimView)
+import {-# SOURCE #-} Agda.TypeChecking.Records (getDefType)
 
 import Agda.TypeChecking.Monad.Base
 import Agda.TypeChecking.Monad.Builtin (HasBuiltins)
@@ -42,8 +44,7 @@ import Agda.TypeChecking.Monad.Context
 import Agda.TypeChecking.Monad.Debug
 import Agda.TypeChecking.Monad.MetaVars (metaType)
 import Agda.TypeChecking.Monad.Signature (HasConstInfo(..), applyDef)
-import Agda.TypeChecking.ProjectionLike (elimView)
-import Agda.TypeChecking.Records (getDefType)
+import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
@@ -82,12 +83,11 @@ hasBiggerSort = void . inferUnivSort
 --   return that. Otherwise, return @PiSort a s2@ and add a constraint to
 --   ensure we can compute the sort eventually.
 inferPiSort
-  :: (MonadReduce m, MonadAddContext m, MonadDebug m)
+  :: (MonadReduce m, MonadAddContext m, HasConstInfo m, HasBuiltins m, MonadDebug m)
   => Dom Type -> Abs Sort -> m Sort
 inferPiSort a s2 = do
-  s1' <- reduce $ getSort a
-  let a' = set lensSort s1' a
-  s2' <- mapAbstraction a' reduce s2
+  s1' <- reduce =<< sortOf (unEl $ unDom a)
+  s2' <- mapAbstraction a reduce s2
   -- we do instantiateFull here to perhaps remove some (flexible)
   -- dependencies of s2 on var 0, thus allowing piSort' to reduce
   s2' <- instantiateFull s2'
@@ -101,7 +101,7 @@ inferPiSort a s2 = do
   --    addConstraint $ HasPTSRule s1 s2
   --    return $ PiSort s1 s2
 
-  return $ piSort a' s2'
+  return $ piSort ((s1',) <$> a) s2'
 
 -- | As @inferPiSort@, but for a nondependent function type.
 inferFunSort :: Dom Type -> Sort -> TCM Sort

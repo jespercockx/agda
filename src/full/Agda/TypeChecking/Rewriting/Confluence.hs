@@ -450,7 +450,7 @@ forceEtaExpansion a v (e:es) = case e of
     let ra = defType rdef
     pars <- newArgsMeta ra
     s <- ra `piApplyM` pars >>= \s -> ifIsSort s return __IMPOSSIBLE__
-    equalType a $ El s (Def r $ map Apply pars)
+    equalType a $ El () (Def r $ map Apply pars)
 
     -- Eta-expand v at record type r, and get field corresponding to f
     (_ , c , ci , fields) <- etaExpandRecord_ r pars (theDef rdef) v
@@ -514,8 +514,9 @@ instance AllHoles Elims where
 
 instance AllHoles Type where
   type PType Type = ()
-  allHoles _ (El s a) = workOnTypes $
-    fmap (El s) <$> allHoles (sort s) a
+  allHoles _ (El _ a) = workOnTypes $ do
+    s <- sortOf a
+    fmap (El ()) <$> allHoles (sort s) a
 
 instance AllHoles Term where
   type PType Term = Type
@@ -628,7 +629,7 @@ instance MetasToVars Term where
     Dummy s es -> Dummy s  <$> metasToVars es
 
 instance MetasToVars Type where
-  metasToVars (El s t) = El <$> metasToVars s <*> metasToVars t
+  metasToVars (El s t) = El () <$> metasToVars t
 
 instance MetasToVars Sort where
   metasToVars = \case

@@ -12,6 +12,7 @@ import Agda.Syntax.Internal.Generic
 
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.CheckInternal
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Pretty
@@ -21,8 +22,9 @@ import Agda.Utils.Size
 import Agda.Utils.Impossible
 
 reconstructParametersInType :: Type -> TCM Type
-reconstructParametersInType a =
-  traverse (reconstructParameters (sort $ getSort a)) a
+reconstructParametersInType a = do
+  s <- sortOf $ unEl a
+  traverse (reconstructParameters (sort s)) a
 
 reconstructParametersInTel :: Telescope -> TCM Telescope
 reconstructParametersInTel EmptyTel = return EmptyTel
@@ -32,10 +34,11 @@ reconstructParametersInTel (ExtendTel a tel) = do
     ExtendTel (ar <$ a) <$> traverse reconstructParametersInTel tel
 
 reconstructParametersInEqView :: EqualityView -> TCM EqualityView
-reconstructParametersInEqView (EqualityType s eq l a u v) =
-  EqualityType s eq l <$> traverse (reconstructParameters $ sort s) a
-                      <*> traverse (reconstructParameters $ El s $ unArg a) u
-                      <*> traverse (reconstructParameters $ El s $ unArg a) v
+reconstructParametersInEqView (EqualityType _ eq l a u v) = do
+  s <- sortOf $ unArg a -- TODO: is this necessary?
+  EqualityType () eq l <$> traverse (reconstructParameters $ sort s) a
+                       <*> traverse (reconstructParameters $ El () $ unArg a) u
+                       <*> traverse (reconstructParameters $ El () $ unArg a) v
 reconstructParametersInEqView (OtherType a) = OtherType <$> reconstructParametersInType a
 
 reconstructParameters :: Type -> Term -> TCM Term

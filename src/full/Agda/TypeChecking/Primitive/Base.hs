@@ -36,8 +36,7 @@ garr :: Monad m => (Relevance -> Relevance) -> m Type -> m Type -> m Type
 garr f a b = do
   a' <- a
   b' <- b
-  return $ El (funSort (defaultDom a') (getSort b')) $
-    Pi (mapRelevance f $ defaultDom a') (NoAbs "_" b')
+  return $ El () $ Pi (mapRelevance f $ defaultDom a') (NoAbs "_" b')
 
 gpi :: (MonadAddContext m, MonadDebug m)
     => ArgInfo -> String -> m Type -> m Type -> m Type
@@ -47,8 +46,7 @@ gpi info name a b = do
       dom = defaultNamedArgDom info name a
   b <- addContext (name, dom) b
   let y = stringToArgName name
-  return $ El (piSort dom (Abs y (getSort b)))
-              (Pi dom (Abs y b))
+  return $ El () (Pi dom (Abs y b))
 
 hPi, nPi :: (MonadAddContext m, MonadDebug m)
          => String -> m Type -> m Type -> m Type
@@ -71,10 +69,10 @@ pPi' n phi b = toFinitePi <$> nPi' n (elInf $ cl isOne <@> phi) b
    isOne = fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinIsOne
 
 el' :: Monad m => m Term -> m Term -> m Type
-el' l a = El <$> (tmSort <$> l) <*> a
+el' l a = El () <$> a
 
 elInf :: Functor m => m Term -> m Type
-elInf t = (El Inf <$> t)
+elInf t = (El () <$> t)
 
 nolam :: Term -> Term
 nolam = Lam defaultArgInfo . NoAbs "_"
@@ -116,7 +114,7 @@ path :: TCM Term -> TCM Term
 path t = primPath <@> t
 
 el :: Functor tcm => tcm Term -> tcm Type
-el t = El (mkType 0) <$> t
+el t = El () <$> t
 
 tset :: Monad tcm => tcm Type
 tset = return $ sort (mkType 0)

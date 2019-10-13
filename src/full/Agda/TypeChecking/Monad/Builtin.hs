@@ -70,7 +70,7 @@ litType l = case l of
   LitQName _ _  -> el <$> primQName
   LitMeta _ _ _ -> el <$> primAgdaMeta
   where
-    el t = El (mkType 0) t
+    el t = El () t
 
 instance MonadIO m => HasBuiltins (TCMT m) where
   getBuiltinThing b = liftM2 mplus (Map.lookup b <$> useTC stLocalBuiltins)
@@ -578,7 +578,7 @@ equalityView t0@(El s t) = do
       let n = length vs
       unless (n >= 3) __IMPOSSIBLE__
       let (pars, [ typ , lhs, rhs ]) = splitAt (n-3) vs
-      return $ EqualityType s equality pars typ lhs rhs
+      return $ EqualityType () equality pars typ lhs rhs
     _ -> return $ OtherType t0
 
 -- | Revert the 'EqualityView'.
@@ -588,7 +588,7 @@ equalityView t0@(El s t) = do
 equalityUnview :: EqualityView -> Type
 equalityUnview (OtherType t) = t
 equalityUnview (EqualityType s equality l t lhs rhs) =
-  El s $ Def equality $ map Apply (l ++ [t, lhs, rhs])
+  El () $ Def equality $ map Apply (l ++ [t, lhs, rhs])
 
 -- | Primitives with typechecking constrants.
 constrainedPrims :: [String]

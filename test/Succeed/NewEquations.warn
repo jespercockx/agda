@@ -1,0 +1,22 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > NewEquations.agda:58,13-20
+out > Confluence check failed: fold (λ z z₁ → c z z₁) n ((x ∷ xs) ++ ys)
+out > reduces to both fold c (fold c n ys) (x ∷ xs) and
+out > fold (λ z z₁ → c z z₁) n (x ∷ xs ++ ys) which are not equal because
+out > Panic: de Bruijn index out of scope: 12 in context [xs, x, ys, n,
+out > c, B, A]
+out > when checking confluence of the rewrite rule fold-++ with
+out > NewEquations._++_-clause2
+out > NewEquations.agda:59,13-21
+out > Confluence check failed:
+out > fold (λ z z₁ → c z z₁) n (map (λ z → f z) (x ∷ xs)) reduces to both
+out > fold (λ x₁ → c (f x₁)) n (x ∷ xs) and
+out > fold (λ z z₁ → c z z₁) n (f x ∷ map (λ z → f z) xs)
+out > which are not equal because
+out > Panic: de Bruijn index out of scope: 13 in context [xs, x, n, c, f,
+out > C, B, A]
+out > when checking confluence of the rewrite rule fold-map with
+out > NewEquations.map-clause2
+out >

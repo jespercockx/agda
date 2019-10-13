@@ -267,7 +267,7 @@ instance GenC Telescope where
     telFromList <$> mapM genC confs
 
 instance GenC Type where
-  genC conf = El <$> genC conf <*> genC (isTypeConf conf)
+  genC conf = El () <$> genC (isTypeConf conf)
 
 instance GenC Term where
   genC conf = case tcFixSize conf of
@@ -468,7 +468,7 @@ instance ShrinkC Telescope Telescope where
   noShrink = id
 
 instance ShrinkC Type Type where
-  shrinkC conf (El s t) = uncurry El <$> shrinkC conf (s, YesType t)
+  shrinkC conf (El s t) = El () <$> shrinkC conf (YesType t)
   noShrink = id
 
 instance ShrinkC Term Term where

@@ -1,3 +1,2 @@
-Failed to solve the following constraints:
-  Is empty: y ≅ x
-      [ at Issue1408b.agda:20,12-14 ]
+An internal error has occurred. Please report this as a bug.
+Location of the error: src/full/Agda/TypeChecking/Sort.hs

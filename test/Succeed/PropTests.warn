@@ -1,0 +1,7 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > PropTests.agda:13,17-19
+out > Panic: de Bruijn index out of scope: 3 in context []
+out > when checking that the pattern p₁ has type TestProp
+out >

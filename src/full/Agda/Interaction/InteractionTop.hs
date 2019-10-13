@@ -722,7 +722,7 @@ interpret (Cmd_elaborate_give norm ii rng s) = do
     expr <- B.parseExprIn ii rng s
     goal <- B.typeOfMeta AsIs ii
     term <- case goal of
-      OfType _ ty -> checkExpr expr =<< isType_ ty
+      OfType _ ty -> checkExpr expr =<< snd <$> isType_ ty
       _           -> __IMPOSSIBLE__
     nf <- normalForm norm term
     txt <- localTC (\ e -> e { envPrintMetasBare = True }) (TCP.prettyTCM nf)
@@ -750,7 +750,7 @@ interpret (Cmd_goal_type_context_check norm ii rng s) = do
     expr <- B.parseExprIn ii rng s
     goal <- B.typeOfMeta AsIs ii
     term <- case goal of
-      OfType _ ty -> checkExpr expr =<< isType_ ty
+      OfType _ ty -> checkExpr expr =<< snd <$> isType_ ty
       _           -> __IMPOSSIBLE__
     normalForm norm term
   cmd_goal_type_context_and (GoalAndElaboration term) norm ii rng s

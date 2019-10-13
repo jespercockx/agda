@@ -1,0 +1,5 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+err > agda: de Bruijn index out of scope: 0 in context []
+err >

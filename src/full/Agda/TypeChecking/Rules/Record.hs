@@ -102,7 +102,7 @@ checkRecDef i name uc ind eta con (A.DataDefParams gpars ps) contel fields =
 
       -- Check and evaluate field types.
       reportSDoc "tc.rec" 15 $ "checking fields"
-      contype <- workOnTypes $ instantiateFull =<< isType_ contel
+      contype <- workOnTypes $ instantiateFull =<< snd <$> isType_ contel
       reportSDoc "tc.rec" 20 $ vcat
         [ "contype = " <+> prettyTCM contype ]
 
@@ -127,7 +127,7 @@ checkRecDef i name uc ind eta con (A.DataDefParams gpars ps) contel fields =
         "gamma = " <+> inTopContext (prettyTCM gamma)
 
       -- record type (name applied to parameters)
-      rect <- El s . Def name . map Apply <$> getContextArgs
+      rect <- El () . Def name . map Apply <$> getContextArgs
 
       -- Put in @rect@ as correct target of constructor type.
       -- Andreas, 2011-05-10 use telePi_ instead of telePi to preserve

@@ -50,6 +50,7 @@ import Agda.TypeChecking.RecordPatterns
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Rewriting
 import Agda.TypeChecking.SizedTypes.Solve
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Warnings
@@ -200,6 +201,8 @@ checkDecl d = setCurrentRange d $ do
       A.UnquoteDecl mi is xs e -> checkMaybeAbstractly is $ checkUnquoteDecl mi is xs e
       A.UnquoteDef is xs e     -> impossible $ checkMaybeAbstractly is $ checkUnquoteDef is xs e
 
+    reportSDoc "tc.decl" 10 $ "finished checking" <+> prettyA d
+
     whenNothingM (asksTC envMutualBlock) $ do
 
       -- Syntax highlighting.
@@ -337,7 +340,7 @@ unquoteTop xs e = do
   lzero <- primLevelZero
   let vArg = defaultArg
       hArg = setHiding Hidden . vArg
-  m    <- checkExpr e $ El (mkType 0) $ apply tcm [hArg lzero, vArg unit]
+  m    <- checkExpr e $ El () $ apply tcm [hArg lzero, vArg unit]
   res  <- runUnquoteM $ tell xs >> evalTCM m
   case res of
     Left err      -> typeError $ UnquoteFailed err
@@ -530,7 +533,7 @@ checkGeneralize s i info x e = do
     -- Check the signature and collect the created metas.
     (telNames, tGen) <-
       generalizeType s $ locallyTC eGeneralizeMetas (const YesGeneralize) $
-        workOnTypes $ isType_ e
+        workOnTypes $ snd <$> isType_ e
     let n = length telNames
 
     reportSDoc "tc.decl.gen" 10 $ sep
@@ -571,17 +574,20 @@ checkAxiom' gentel funSig i info0 mp x e = whenAbstractFreezeMetasAfter i $ do
   let mod  = Modality rel q c
   let info = setModality mod info0
   applyCohesionToContext c $ do
-  (genParams, npars, t) <- workOnTypes $ case gentel of
-        Nothing     -> ([], 0,) <$> isType_ e
+  (genParams, npars, st , t) <- workOnTypes $ case gentel of
+        Nothing     -> do
+          (st , t) <- isType_ e
+          return ([], 0, st, t)
         Just gentel ->
           checkGeneralizeTelescope gentel $ \ genParams ptel -> do
-            t <- workOnTypes $ isType_ e
-            return (genParams, size ptel, abstract ptel t)
+            (_ , t) <- workOnTypes $ isType_ e
+            st <- escapeContext (size ptel) $ sortOf $ unEl $ abstract ptel t
+            return (genParams, size ptel, st, abstract ptel t)
 
   reportSDoc "tc.decl.ax" 10 $ sep
     [ text $ "checked type signature"
     , nest 2 $ (prettyTCM mod <> prettyTCM x) <+> ":" <+> prettyTCM t
-    , nest 2 $ "of sort " <+> prettyTCM (getSort t)
+    , nest 2 $ "of sort " <+> prettyTCM st
     ]
 
   when (not $ null genParams) $
@@ -594,7 +600,7 @@ checkAxiom' gentel funSig i info0 mp x e = whenAbstractFreezeMetasAfter i $ do
   -- Andreas, 2015-03-17 Issue 1428: Do not postulate sizes in parametrized
   -- modules!
   when (funSig == A.NoFunSig) $ do
-    whenM ((== SizeUniv) <$> do reduce $ getSort t) $ do
+    whenM ((== SizeUniv) <$> do reduce st) $ do
       whenM ((> 0) <$> getContextSize) $ do
         typeError $ GenericError $ "We don't like postulated sizes in parametrized modules."
 
@@ -658,7 +664,7 @@ checkPrimitive i x e =
           , "primSetOmega"
           ]
     when (name `elem` builtinPrimitives) $ typeError $ NoSuchPrimitiveFunction name
-    t <- isType_ e
+    (st , t) <- isType_ e
     noConstraints $ equalType t t'
     let s  = prettyShow $ qnameName x
     bindPrimitive s pf

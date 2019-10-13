@@ -796,7 +796,7 @@ instance Subst BraveTerm BraveTerm where
   applySubst = applySubstTerm
 
 instance (Coercible a Term, Subst t a, Subst t b) => Subst t (Type'' a b) where
-  applySubst rho (El s t) = applySubst rho s `El` applySubst rho t
+  applySubst rho (El s t) = El () $ applySubst rho t
 
 instance (Coercible a Term, Subst t a) => Subst t (Sort' a) where
   applySubst rho s = case s of
@@ -1150,11 +1150,10 @@ domFromNamedArgName x = () <$ domFromNamedArg (fmap forceName x)
 
 -- | @mkPi dom t = telePi (telFromList [dom]) t@
 mkPi :: Dom (ArgName, Type) -> Type -> Type
-mkPi !dom b = el $ Pi a (mkAbs x b)
+mkPi !dom b = El () $ Pi a (mkAbs x b)
   where
     x = fst $ unDom dom
     a = snd <$> dom
-    el = El $ piSort a (Abs x (getSort b)) -- piSort checks x freeIn
 
 mkLam :: Arg ArgName -> Term -> Term
 mkLam a v = Lam (argInfo a) (Abs (unArg a) v)
@@ -1162,10 +1161,9 @@ mkLam a v = Lam (argInfo a) (Abs (unArg a) v)
 telePi' :: (Abs Type -> Abs Type) -> Telescope -> Type -> Type
 telePi' reAbs = telePi where
   telePi EmptyTel          t = t
-  telePi (ExtendTel u tel) t = el $ Pi u $ reAbs b
+  telePi (ExtendTel u tel) t = El () $ Pi u $ reAbs b
     where
       b  = (`telePi` t) <$> tel
-      el = El $ piSort u (getSort <$> b)
 
 -- | Uses free variable analysis to introduce 'NoAbs' bindings.
 telePi :: Telescope -> Type -> Type
@@ -1389,8 +1387,8 @@ univInf =
 
 -- | Compute the sort of a function type from the sorts of its
 --   domain and codomain.
-funSort' :: Dom Type -> Sort -> Maybe Sort
-funSort' a b = case (getSort a, b) of
+funSort' :: Dom (Sort , Type) -> Sort -> Maybe Sort
+funSort' a b = case (fst $ unDom a, b) of
   (Inf           , _            ) -> Just Inf
   (_             , Inf          ) -> Just Inf
   (Type a , Type b) -> Just $ Type $ levelLub a b
@@ -1401,12 +1399,12 @@ funSort' a b = case (getSort a, b) of
   (Prop a , Prop b) -> Just $ Prop $ levelLub a b
   (a             , b            ) -> Nothing
 
-funSort :: Dom Type -> Sort -> Sort
+funSort :: Dom (Sort , Type) -> Sort -> Sort
 funSort a b = fromMaybe (PiSort a (NoAbs underscore b)) $ funSort' a b
 
 -- | Compute the sort of a pi type from the sorts of its domain
 --   and codomain.
-piSort' :: Dom Type -> Abs Sort -> Maybe Sort
+piSort' :: Dom (Sort , Type) -> Abs Sort -> Maybe Sort
 piSort' a      (NoAbs _ b) = funSort' a b
 piSort' a bAbs@(Abs   _ b) = case flexRigOccurrenceIn 0 b of
   Nothing -> Just $ funSort a $ noabsApp __IMPOSSIBLE__ bAbs
@@ -1444,7 +1442,7 @@ piSort' a bAbs@(Abs   _ b) = case flexRigOccurrenceIn 0 b of
 --     WeaklyRigid   -> Just Inf
 --     Flexible _    -> Nothing
 
-piSort :: Dom Type -> Abs Sort -> Sort
+piSort :: Dom (Sort , Type) -> Abs Sort -> Sort
 piSort a b = fromMaybe (PiSort a b) $ piSort' a b
 
 ---------------------------------------------------------------------------

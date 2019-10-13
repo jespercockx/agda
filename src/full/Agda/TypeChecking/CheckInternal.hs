@@ -16,7 +16,6 @@ module Agda.TypeChecking.CheckInternal
   , checkInternal'
   , Action(..), defaultAction, eraseUnusedAction
   , infer
-  , inferSort
   , shouldBeSort
   ) where
 
@@ -188,13 +187,13 @@ checkInternal' action v cmp t = verboseBracket "tc.check.internal" 20 "" $ do
     Pi a b     -> do
       s <- shouldBeSort t
       when (s == SizeUniv) $ typeError $ FunctionTypeInSizeUniv v
-      let sa  = getSort a
-          sb  = getSort (unAbs b)
-          mkDom v = El sa v <$ a
+      let mkDom v = El () v <$ a
           mkRng v = fmap (v <$) b
           -- Preserve NoAbs
           goInside = case b of Abs{}   -> addContext (absName b, a)
                                NoAbs{} -> id
+      sa <- sortOf $ unEl $ unDom a -- TODO: this wouldn't be necessary if @checkType@ would take an action
+      sb <- goInside $ sortOf (unEl $ unAbs b) -- TODO: same here
       a <- mkDom <$> checkInternal' action (unEl $ unDom a) CmpLeq (sort sa)
       v' <- goInside $ Pi a . mkRng <$> checkInternal' action (unEl $ unAbs b) CmpLeq (sort sb)
       s' <- sortOf v'
@@ -404,12 +403,12 @@ checkSort action s =
     Inf      -> return Inf
     SizeUniv -> return SizeUniv
     PiSort dom s2 -> do
-      let El s1 a = unDom dom
+      let (s1 , El _ a) = unDom dom
       s1' <- checkSort action s1
       a' <- checkInternal' action a CmpLeq $ sort s1'
-      let dom' = dom $> El s1' a'
+      let dom' = dom $> El () a'
       s2' <- mapAbstraction dom' (checkSort action) s2
-      return $ PiSort dom' s2'
+      return $ PiSort ((s1',) <$> dom') s2'
     UnivSort s -> UnivSort <$> checkSort action s
     MetaS x es -> do -- we assume sort meta instantiations to be well-formed
       a <- metaType x
@@ -452,31 +451,6 @@ cmptype cmp t1 t2 = do
     -- Andreas, 2017-03-09, issue #2493
     -- Only check subtyping, do not solve any metas!
     dontAssignMetas $ compareType cmp t1 t2
-
--- | Compute the sort of a type.
-
-inferSort :: (MonadCheckInternal m) => Term -> m Sort
-inferSort t = case t of
-    Var i es   -> do
-      a <- typeOfBV i
-      (_, s) <- eliminate (Var i []) a es
-      shouldBeSort s
-    Def f es   -> do  -- f is not projection(-like)!
-      a <- defType <$> getConstInfo f
-      (_, s) <- eliminate (Def f []) a es
-      shouldBeSort s
-    MetaV x es -> do
-      a <- metaType x
-      (_, s) <- eliminate (MetaV x []) a es
-      shouldBeSort s
-    Pi a b     -> inferPiSort a (getSort <$> b)
-    Sort s     -> inferUnivSort s
-    Con{}      -> __IMPOSSIBLE__
-    Lit{}      -> __IMPOSSIBLE__
-    Lam{}      -> __IMPOSSIBLE__
-    Level{}    -> __IMPOSSIBLE__
-    DontCare{} -> __IMPOSSIBLE__
-    Dummy s _  -> __IMPOSSIBLE_VERBOSE__ s
 
 -- | @eliminate t self es@ eliminates value @self@ of type @t@ by spine @es@
 --   and returns the remaining value and its type.

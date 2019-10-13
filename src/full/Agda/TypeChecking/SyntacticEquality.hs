@@ -147,6 +147,9 @@ instance SynEq Sort where
 instance SynEq Type where
   synEq (El s t) (El s' t') = (El s *** El s') <$> synEq t t'
 
+instance (SynEq a, SynEq b) => SynEq (a,b) where
+  synEq (x,y) (x',y') = (,) <$$> synEq x x' <**> synEq y y'
+
 instance SynEq a => SynEq [a] where
   synEq as as'
     | length as == length as' = unzip <$> zipWithM synEq' as as'

@@ -1,3 +1,2 @@
-Failed to solve the following constraints:
-  Is empty: c₂ A ≅ c₁ B
-      [ at Issue1435-helper-absurd.agda:26,29-31 ]
+An internal error has occurred. Please report this as a bug.
+Location of the error: src/full/Agda/TypeChecking/Sort.hs

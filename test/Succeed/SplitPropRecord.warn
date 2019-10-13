@@ -1,0 +1,7 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > SplitPropRecord.agda:12,1-27
+out > Panic: de Bruijn index out of scope: 2 in context []
+out > when checking the definition of unliftP'
+out >

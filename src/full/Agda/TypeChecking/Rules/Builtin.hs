@@ -108,14 +108,14 @@ coreBuiltins =
                                                              (Just $ requireCubical >>
                                                              (hPi "a" (el primLevel) $
                                                               hPi "A" (return $ sort $ varSort 0) $
-                                                              (El (varSort 1) <$> varM 0) -->
-                                                              (El (varSort 1) <$> varM 0) -->
+                                                              (El () <$> varM 0) -->
+                                                              (El () <$> varM 0) -->
                                                               return (sort $ varSort 1)))
                                                              verifyPath)
   , (builtinPathP                            |-> builtinPostulateC (hPi "a" (el primLevel) $
                                                               nPi "A" (tinterval --> (return $ sort $ varSort 0)) $
-                                                              (El (varSort 1) <$> varM 0 <@> primIZero) -->
-                                                              (El (varSort 1) <$> varM 0 <@> primIOne) -->
+                                                              (El () <$> varM 0 <@> primIZero) -->
+                                                              (El () <$> varM 0 <@> primIOne) -->
                                                               return (sort $ varSort 1)))
   , (builtinInterval                         |-> BuiltinData (requireCubical >> return (sort Inf)) [builtinIZero,builtinIOne])
   , (builtinSub                              |-> builtinPostulateC (runNamesT [] $ hPi' "a" (el $ cl primLevel) $ \ a ->
@@ -154,16 +154,16 @@ coreBuiltins =
 
   , (builtinId                               |-> builtinPostulateC (hPi "a" (el primLevel) $
                                                               hPi "A" (return $ sort $ varSort 0) $
-                                                              (El (varSort 1) <$> varM 0) -->
-                                                              (El (varSort 1) <$> varM 0) -->
+                                                              (El () <$> varM 0) -->
+                                                              (El () <$> varM 0) -->
                                                               return (sort $ varSort 1)))
   , (builtinConId                            |-> builtinPostulateC (hPi "a" (el primLevel) $
                                                            hPi "A" (return $ sort $ varSort 0) $
-                                                           hPi "x" (El (varSort 1) <$> varM 0) $
-                                                           hPi "y" (El (varSort 2) <$> varM 1) $
+                                                           hPi "x" (El () <$> varM 0) $
+                                                           hPi "y" (El () <$> varM 1) $
                                                            tinterval -->
-                                                           (El (varSort 3) <$> primPath <#> varM 3 <#> varM 2 <@> varM 1 <@> varM 0) -->
-                                                           (El (varSort 3) <$> primId <#> varM 3 <#> varM 2 <@> varM 1 <@> varM 0)))
+                                                           (El () <$> primPath <#> varM 3 <#> varM 2 <@> varM 1 <@> varM 0) -->
+                                                           (El () <$> primId <#> varM 3 <#> varM 2 <@> varM 1 <@> varM 0)))
   , (builtinEquiv                            |-> BuiltinUnknown (Just $ requireCubical >> runNamesT [] (
                                                                     hPi' "l" (el $ cl primLevel) $ \ a ->
                                                                     hPi' "l'" (el $ cl primLevel) $ \ b ->
@@ -385,7 +385,7 @@ coreBuiltins =
         arg :: TCM Term -> TCM Term
         arg t = primArg <@> t
 
-        elV x a = El (varSort x) <$> a
+        elV x a = El () <$> a
 
         tsetL l    = return $ sort (varSort l)
         tlevel     = el primLevel
@@ -403,7 +403,7 @@ coreBuiltins =
         tstring    = el primString
         tqname     = el primQName
         tmeta      = el primAgdaMeta
-        tsize      = El sSizeUniv <$> primSize
+        tsize      = El () <$> primSize
         tbool      = el primBool
         thiding    = el primHiding
         trelevance = el primRelevance
@@ -420,7 +420,7 @@ coreBuiltins =
         tclause    = el primAgdaClause
         tTCM l a   = elV l (primAgdaTCM <#> varM l <@> a)
         tTCM_ a    = el (primAgdaTCM <#> primLevelZero <@> a)
-        tinterval  = El Inf <$> primInterval
+        tinterval  = El () <$> primInterval
 
         verifyPlus plus =
             verify ["n","m"] $ \(@@) zero suc (==) (===) choice -> do
@@ -524,13 +524,13 @@ coreBuiltins =
                                 (Term -> Term -> TCM ()) ->
                                 ([TCM ()] -> TCM ()) -> TCM a) -> TCM a
         verify' pNat pZero pSuc xs f = do
-            nat  <- El (mkType 0) <$> pNat
+            nat  <- El () <$> pNat
             zero <- pZero
             s    <- pSuc
             let x == y  = noConstraints $ equalTerm nat x y
                 -- Andreas: 2013-10-21 I put primBool here on the inside
                 -- since some Nat-builtins do not require Bool-builtins
-                x === y = do bool <- El (mkType 0) <$> primBool
+                x === y = do bool <- El () <$> primBool
                              noConstraints $ equalTerm bool x y
                 suc n  = s `apply1` n
                 choice = foldr1 (\x y -> x `catchError` \_ -> y)

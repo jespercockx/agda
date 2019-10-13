@@ -7,6 +7,7 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
 import Data.Foldable (traverse_)
+import Data.Functor (($>))
 import Data.Maybe (fromMaybe, catMaybes, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -38,6 +39,7 @@ import Agda.TypeChecking.Forcing
 import Agda.TypeChecking.Irrelevance
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.ProjectionLike
+import Agda.TypeChecking.Sort
 
 import {-# SOURCE #-} Agda.TypeChecking.Rules.Term ( isType_ )
 
@@ -248,7 +250,7 @@ checkConstructor d uc tel nofIxs s con@(A.Axiom _ i ai Nothing c e) =
 
               -- nofIxs == 0 means the data type can be reconstructed
               -- by appling the QName d to the parameters.
-              dataT <- El s <$> (pure $ Def d $ map Apply $ teleArgs params)
+              dataT <- El () <$> (pure $ Def d $ map Apply $ teleArgs params)
 
               reportSDoc "tc.data.con.comp" 5 $ vcat $
                 [ "params =" <+> pretty params
@@ -290,7 +292,7 @@ checkConstructor d uc tel nofIxs s con@(A.Axiom _ i ai Nothing c e) =
     checkConstructorType (A.ScopedExpr s e) d = withScope_ s $ checkConstructorType e d
     checkConstructorType e d = do
       let check k e = do
-            t <- workOnTypes $ isType_ e
+            (st , t) <- workOnTypes $ isType_ e
             -- check that the type of the constructor ends in the data type
             n <- getContextSize
             debugEndsIn t d (n - k)
@@ -435,9 +437,13 @@ defineCompData d con params names fsT t boundary = do
               --            w1'
               imax x y = pure tIMax <@> x <@> y
               ineg r = pure tINeg <@> r
-              lvlOfType = (\ (Type l) -> Level l) . getSort
-              pOr la i j u0 u1 = pure tPOr <#> (lvlOfType <$> la) <@> i <@> j
-                                           <#> (ilam "o" $ \ _ -> unEl <$> la) <@> u0 <@> u1
+              lvlOfType :: Type -> NamesT TCM Term
+              lvlOfType t = do
+                reportSDoc "tc.cubical" 50 $ "lvlOfType" <+> prettyTCM t
+                (\ (Type l) -> Level l) <$> sortOf (unEl t)
+              pOr la i j u0 u1 = do
+                pure tPOr <#> (lvlOfType =<< la) <@> i <@> j
+                          <#> (ilam "o" $ \ _ -> unEl <$> la) <@> u0 <@> u1
               absAp x y = liftM2 absApp x y
 
               mkFace (r,(u1,u2)) = runNamesT [] $ do
@@ -453,7 +459,7 @@ defineCompData d con params names fsT t boundary = do
                   let
                     -- Γ, i ⊢ squeeze u = primTrans (\ j -> ty [i := i ∨ j]) (φ ∨ i) u
                     squeeze u = cl primTrans
-                                          <#> (lam "j" $ \ j -> lvlOfType <$> ty `absAp` (imax i j))
+                                          <#> (lam "j" $ \ j -> lvlOfType =<< (ty `absAp` (imax i j)))
                                           <@> (lam "j" $ \ j -> unEl <$> ty `absAp` (imax i j))
                                           <@> (phi `imax` i)
                                           <@> u
@@ -476,7 +482,7 @@ defineCompData d con params names fsT t boundary = do
                 faces <- mapM (\ x -> liftM2 (,) (open . noabsApp __IMPOSSIBLE__ $ fmap fst x) (open $ fmap snd x)) faces
                 let
                   thePsi = foldl1 imax (map fst faces)
-                  hcomp ty phi sys a0 = pure tHComp <#> (lvlOfType <$> ty)
+                  hcomp ty phi sys a0 = pure tHComp <#> (lvlOfType =<< ty)
                                                     <#> (unEl <$> ty)
                                                     <#> phi
                                                     <@> sys
@@ -620,17 +626,26 @@ freshAbstractQName'_ s = freshAbstractQName noFixity' (C.Name noRange C.InScope 
 data LType = LEl Level Term deriving (Eq,Show)
 
 fromLType :: LType -> Type
-fromLType (LEl l t) = El (Type l) t
+fromLType (LEl l t) = El () t
 
 lTypeLevel :: LType -> Level
 lTypeLevel (LEl l t) = l
 
-toLType :: MonadReduce m => Type -> m (Maybe LType)
+toLType :: (MonadReduce m, MonadAddContext m, HasBuiltins m, HasConstInfo m)
+        => Type -> m (Maybe LType)
 toLType ty = do
-  sort <- reduce $ getSort ty
+  reportSDoc "tc.cubical" 50 $ "toLType" <+> prettyTCM ty
+  sort <- reduce =<< sortOf (unEl ty)
   case sort of
     Type l -> return $ Just $ LEl l (unEl ty)
     _      -> return $ Nothing
+
+toLTel :: (MonadReduce m, MonadAddContext m, HasBuiltins m, HasConstInfo m)
+       => Telescope -> MaybeT m (Tele (Dom LType))
+toLTel EmptyTel          = return EmptyTel
+toLTel (ExtendTel a tel) = do
+  a' <- MaybeT $ toLType (unDom a)
+  ExtendTel (a $> a') . (tel $>) <$> underAbstraction a tel toLTel
 
 instance Subst Term LType where
   applySubst rho (LEl l t) = LEl (applySubst rho l) (applySubst rho t)
@@ -641,12 +656,14 @@ instance Subst Term LType where
 data CType = ClosedType QName | LType LType deriving (Eq,Show)
 
 fromCType :: CType -> Type
-fromCType (ClosedType q) = El Inf (Def q [])
+fromCType (ClosedType q) = El () (Def q [])
 fromCType (LType t) = fromLType t
 
-toCType :: MonadReduce m => Type -> m (Maybe CType)
+toCType :: (MonadReduce m, MonadAddContext m, HasBuiltins m, HasConstInfo m)
+        => Type -> m (Maybe CType)
 toCType ty = do
-  sort <- reduce $ getSort ty
+  reportSDoc "tc.cubical" 50 $ "toCType" <+> prettyTCM ty
+  sort <- reduce =<< sortOf (unEl ty)
   case sort of
     Type l -> return $ Just $ LType (LEl l (unEl ty))
     Inf    -> do
@@ -655,6 +672,13 @@ toCType ty = do
         Def q [] -> return $ Just $ ClosedType q
         _        -> return $ Nothing
     _      -> return $ Nothing
+
+toCTel :: (MonadReduce m, MonadAddContext m, HasBuiltins m, HasConstInfo m)
+       => Telescope -> MaybeT m (Tele (Dom CType))
+toCTel EmptyTel          = return EmptyTel
+toCTel (ExtendTel a tel) = do
+  a' <- MaybeT $ toCType (unDom a)
+  ExtendTel (a $> a') . (tel $>) <$> underAbstraction a tel toCTel
 
 instance Subst Term CType where
   applySubst rho t@ClosedType{} = t
@@ -687,11 +711,11 @@ defineTranspOrHCompForFields cmd pathCons project name params fsT fns rect = do
     ]
   case cmd of
        DoTransp -> runMaybeT $ do
-         fsT' <- traverse (traverse (MaybeT . toCType)) fsT
+         fsT' <- addContext params $ toCTel fsT
          lift $ defineTranspForFields pathCons project name params fsT' fns rect
        DoHComp -> runMaybeT $ do
-         fsT' <- traverse (traverse (MaybeT . toLType)) fsT
-         rect' <- MaybeT $ toLType rect
+         fsT' <- addContext params $ toLTel fsT
+         rect' <- MaybeT $ addContext params $ toLType rect
          lift $ defineHCompForFields project name params fsT' fns rect'
 
 
@@ -745,7 +769,7 @@ defineTranspForFields pathCons applyProj name params fsT fns rect = do
                (absApp <$> rect' <*> pure iz) --> (absApp <$> rect' <*> pure io)
 
   reportSDoc "trans.rec" 20 $ prettyTCM theType
-  reportSDoc "trans.rec" 60 $ text $ "sort = " ++ show (getSort rect')
+  --reportSDoc "trans.rec" 60 $ text $ "sort = " ++ show (getSort rect')
 
   noMutualBlock $ addConstant theName $ (defaultDefn defaultArgInfo theName theType
     (emptyFunction { funTerminates = Just True }))
@@ -1017,7 +1041,7 @@ defineHCompForFields applyProj name params fsT fns rect = do
                   (lam "i" $ \ i -> lam "o" $ \ o -> proj $ w <@> i <@> o) -- TODO wait for phi = 1
                   (proj w0)
 
-  reportSDoc "hcomp.rec" 60 $ text $ "filled_types sorts:" ++ show (map (getSort . fromLType . unDom) filled_types)
+  --reportSDoc "hcomp.rec" 60 $ text $ "filled_types sorts:" ++ show (map (getSort . fromLType . unDom) filled_types)
 
   bodys <- mapM mkBody (zip fns filled_types)
   return $ ((theName, gamma, rtype, map (fmap fromLType) clause_types, bodys),IdS)
@@ -1123,9 +1147,10 @@ fitsIn :: UniverseCheck -> [IsForced] -> Type -> Sort -> TCM Int
 fitsIn uc forceds t s = do
   reportSDoc "tc.data.fits" 10 $
     sep [ "does" <+> prettyTCM t
-        , "of sort" <+> prettyTCM (getSort t)
         , "fit in" <+> prettyTCM s <+> "?"
         ]
+  st <- sortOf $ unEl t
+  reportSDoc "tc.data.fits" 10 $ "sort of t = " <+> prettyTCM st
   -- The code below would be simpler, but doesn't allow datatypes
   -- to be indexed by the universe level.
   -- s' <- instantiateFull (getSort t)
@@ -1144,12 +1169,12 @@ fitsIn uc forceds t s = do
       withoutK <- withoutKOption
       let (forced,forceds') = nextIsForced forceds
       unless (isForced forced && not withoutK) $ do
-        sa <- reduce $ getSort dom
+        sa <- reduce =<< sortOf (unEl $ unDom dom)
         unless (isPath || uc == NoUniverseCheck || sa == SizeUniv) $ sa `leqSort` s
       addContext (absName b, dom) $ do
         succ <$> fitsIn uc forceds' (absBody b) (raise 1 s)
     _ -> do
-      getSort t `leqSort` s
+      st `leqSort` s
       return 0
 
 -- | When --without-K is enabled, we should check that the sorts of
@@ -1158,7 +1183,8 @@ checkIndexSorts :: Sort -> Telescope -> TCM ()
 checkIndexSorts s = \case
   EmptyTel -> return ()
   ExtendTel a tel' -> do
-    getSort a `leqSort` s
+    sa <- sortOf $ unEl $ unDom a
+    sa `leqSort` s
     underAbstraction a tel' $ checkIndexSorts (raise 1 s)
 
 -- | Return the parameters that share variables with the indices
@@ -1207,7 +1233,7 @@ constructs nofPars nofExtraVars t q = constrT nofExtraVars t
                              take nofPars $ downFrom (nofPars + n)
                   -- The indices are fresh metas
                   xs <- newArgsMeta =<< piApplyM td us
-                  let t' = El (raise n $ dataSort $ theDef def) $ Def q $ map Apply $ us ++ xs
+                  let t' = El () $ Def q $ map Apply $ us ++ xs
                   -- Andreas, 2017-11-07, issue #2840
                   -- We should not postpone here, otherwise we might upset the positivity checker.
                   ifM (tryConversion $ equalType t t')

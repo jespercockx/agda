@@ -34,16 +34,16 @@ typeOfInf = hPi "a" (el primLevel) $
 typeOfSharp :: TCM Type
 typeOfSharp = hPi "a" (el primLevel) $
               hPi "A" (return . sort $ varSort 0) $
-              (El (varSort 1) <$> varM 0) -->
-              (El (varSort 1) <$> primInf <#> varM 1 <@> varM 0)
+              (El () <$> varM 0) -->
+              (El () <$> primInf <#> varM 1 <@> varM 0)
 
 -- | The type of @♭@.
 
 typeOfFlat :: TCM Type
 typeOfFlat = hPi "a" (el primLevel) $
              hPi "A" (return . sort $ varSort 0) $
-             (El (varSort 1) <$> primInf <#> varM 1 <@> varM 0) -->
-             (El (varSort 1) <$> varM 0)
+             (El () <$> primInf <#> varM 1 <@> varM 0) -->
+             (El () <$> varM 0)
 
 -- | Binds the INFINITY builtin, but does not change the type's
 -- definition.
@@ -116,13 +116,13 @@ bindBuiltinFlat x =
     kit         <- requireLevels
     Def inf _   <- primInf
     let sharpCon = ConHead sharp CoInductive [defaultArg flat]
-        level    = El (mkType 0) $ Def (typeName kit) []
+        level    = El () $ Def (typeName kit) []
         tel     :: Telescope
-        tel      = ExtendTel (domH $ level)                  $ Abs "a" $
-                   ExtendTel (domH $ sort $ varSort 0)       $ Abs "A" $
-                   ExtendTel (domN $ El (varSort 1) $ var 0) $ Abs "x" $
+        tel      = ExtendTel (domH $ level)            $ Abs "a" $
+                   ExtendTel (domH $ sort $ varSort 0) $ Abs "A" $
+                   ExtendTel (domN $ El () $ var 0)    $ Abs "x" $
                    EmptyTel
-        infA     = El (varSort 2) $ Def inf [ Apply $ defaultArg $ var 1 ]
+        infA     = El () $ Def inf [ Apply $ defaultArg $ var 1 ]
         cpi      = noConPatternInfo { conPType = Just $ defaultArg infA
                                     , conPLazy = True }
     let clause   = Clause
@@ -132,7 +132,7 @@ bindBuiltinFlat x =
           , namedClausePats = [ argN $ Named Nothing $
               ConP sharpCon cpi [ argN $ Named Nothing $ debruijnNamedVar "x" 0 ] ]
           , clauseBody      = Just $ var 0
-          , clauseType      = Just $ defaultArg $ El (varSort 2) $ var 1
+          , clauseType      = Just $ defaultArg $ El () $ var 1
           , clauseCatchall  = False
           , clauseUnreachable = Just False
           }

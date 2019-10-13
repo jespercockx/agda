@@ -597,7 +597,7 @@ instance UnFreezeMeta MetaId where
     unfreezeMeta =<< metaType x
 
 instance UnFreezeMeta Type where
-  unfreezeMeta (El s t) = unfreezeMeta s >> unfreezeMeta t
+  unfreezeMeta (El s t) = unfreezeMeta t
 
 instance UnFreezeMeta Term where
   unfreezeMeta (MetaV x _)   = unfreezeMeta x

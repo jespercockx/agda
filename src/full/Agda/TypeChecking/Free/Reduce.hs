@@ -109,7 +109,7 @@ instance (Reduce a, ForceNotFree a) => ForceNotFree (Elim' a) where
   forceNotFree' (IApply x y r) = IApply <$> forceNotFreeR x <*> forceNotFreeR y <*> forceNotFreeR r
 
 instance ForceNotFree Type where
-  forceNotFree' (El s t) = El <$> forceNotFree' s <*> forceNotFree' t
+  forceNotFree' (El s t) = El () <$> forceNotFree' t
 
 instance ForceNotFree Term where
   forceNotFree' t = case t of
@@ -156,3 +156,6 @@ instance ForceNotFree Sort where
     Inf        -> return s
     SizeUniv   -> return s
     DummyS{}   -> return s
+
+instance (ForceNotFree a, ForceNotFree b) => ForceNotFree (a,b) where
+  forceNotFree' (x,y) = (,) <$> forceNotFree' x <*> forceNotFree' y

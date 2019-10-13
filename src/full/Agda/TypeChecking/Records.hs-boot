@@ -12,3 +12,4 @@ getRecordFieldNames_ :: (HasConstInfo m, ReadTCState m) => QName -> m (Maybe [Ar
 etaContractRecord :: HasConstInfo m => QName -> ConHead -> ConInfo -> Args -> m Term
 isGeneratedRecordConstructor :: (MonadTCEnv m, HasConstInfo m) => QName -> m Bool
 isRecordConstructor :: HasConstInfo m => QName -> m (Maybe (QName, Defn))
+getDefType :: (HasConstInfo m, MonadReduce m, MonadDebug m) => QName -> Type -> m (Maybe Type)

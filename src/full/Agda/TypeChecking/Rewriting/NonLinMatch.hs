@@ -46,6 +46,7 @@ import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Records
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Reduce.Monad
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 
@@ -170,7 +171,8 @@ instance Match t a b => Match t (Dom a) (Dom b) where
   match r gamma k t p v = match r gamma k t (unDom p) (unDom v)
 
 instance Match () NLPType Type where
-  match r gamma k _ (NLPType sp p) (El s a) = workOnTypes $ do
+  match r gamma k _ (NLPType sp p) (El _ a) = workOnTypes $ do
+    s <- sortOf a
     match r gamma k () sp s
     match r gamma k (sort s) p a
 
@@ -200,7 +202,7 @@ instance Match () NLPSort Sort where
 
 instance Match () NLPat Level where
   match r gamma k _ p l = do
-    t <- El (mkType 0) . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
+    t :: Type <- El () . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
     v <- reallyUnLevelView l
     match r gamma k t p v
 

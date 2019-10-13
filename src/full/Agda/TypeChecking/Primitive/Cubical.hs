@@ -23,8 +23,10 @@ import Agda.TypeChecking.Names
 import Agda.TypeChecking.Primitive.Base
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Monad.Builtin
+import Agda.TypeChecking.Sort
 
 import Agda.TypeChecking.Free
+import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Telescope
@@ -443,6 +445,14 @@ mkGComp s = do
 
 primTransHComp :: TranspOrHComp -> [Arg Term] -> Int -> ReduceM (Reduced MaybeReducedArgs Term)
 primTransHComp cmd ts nelims = do
+  reportSDoc "tc.cubical" 40 $ vcat
+    [ "primTransHComp"
+    , nest 2 $ vcat
+      [ "cmd    = " <+> text (show cmd)
+      , "ts     = " <+> prettyList_ (map prettyTCM ts)
+      , "nelims = " <+> text (show nelims)
+      ]
+    ]
   (l,bA,phi,u,u0) <- case (cmd,ts) of
         (DoTransp, [l,bA,phi,  u0]) -> do
           -- u <- runNamesT [] $ do
@@ -515,7 +525,7 @@ primTransHComp cmd ts nelims = do
                    compHCompU cmd phi u u0 ((Level la <$ s, phi', bT, bA) <$ t)
 
                  -- Path/PathP
-                 d | PathType _ _ _ bA x y <- pathV (El __DUMMY_SORT__ d) -> do
+                 d | PathType _ _ _ bA x y <- pathV (El () d) -> do
                    if nelims > 0 then compPathP cmd sphi u u0 l ((bA, x, y) <$ t) else fallback
 
                  Def q [Apply _ , Apply bA , Apply x , Apply y] | Just q == mId -> do
@@ -865,20 +875,20 @@ primTransHComp cmd ts nelims = do
      tIMax <- getTermLocal builtinIMax
      iz    <- getTermLocal builtinIZero
      let
-      toLevel' t = do
-        s <- reduce $ getSort t
+      toLevel' s = do
+        s <- reduce s
         case s of
           (Type l) -> return (Just l)
           _        -> return Nothing
-      toLevel t = fromMaybe __IMPOSSIBLE__ <$> toLevel' t
+      toLevel s = fromMaybe __IMPOSSIBLE__ <$> toLevel' s
      -- make sure the codomain has a level.
-     caseMaybeM (toLevel' . absBody . snd . famThing $ ab) (return Nothing) $ \ _ -> do
+     caseMaybeM (addContext ("i" :: String) $ toLevel' =<< sortOf (unEl . absBody . snd . famThing $ ab)) (return Nothing) $ \ _ -> do
      runNamesT [] $ do
       labA <- do
         let (x,f) = case ab of
               IsFam (a,_) -> (a, \ a -> runNames [] $ (lam "i" $ const (pure a)))
               IsNot (a,_) -> (a, id)
-        lx <- toLevel' x
+        lx <- toLevel' =<< sortOf (unEl $ unDom x)
         caseMaybe lx (return Nothing) $ \ lx -> Just <$>
           mapM (open . f) [Level lx, unEl . unDom $ x]
       caseMaybe labA (return Nothing) $ \ [la,bA] -> Just <$> do
@@ -890,7 +900,7 @@ primTransHComp cmd ts nelims = do
           (DoHComp, IsNot (a , b), Just u) -> do
             bT <- (raise 1 b `absApp`) <$> u1
             let v = u1
-            pure tHComp <#> (Level <$> toLevel bT)
+            pure tHComp <#> (Level <$> (toLevel =<< sortOf (unEl bT)))
                         <#> (pure $ unEl                      $ bT)
                         <#> phi
                         <@> (lam "i" $ \ i -> ilam "o" $ \ o -> gApply (getHiding a) (u <@> i <..> o) v)
@@ -908,7 +918,7 @@ primTransHComp cmd ts nelims = do
                 tLam = Lam defaultArgInfo
             bT <- bind "i" $ \ i -> bB <$> v i
             -- Γ , u1 : A[i1]
-            (pure tTrans <#> (tLam <$> traverse (fmap Level . toLevel) bT)
+            (pure tTrans <#> (tLam <$> traverse (fmap Level . toLevel <=< sortOf) (unEl <$> bT))
                          <@> (pure . tLam $ unEl                      <$> bT)
                          <@> phi
                          <@> gApply (getHiding a) u0 (v (pure iz)))
@@ -1446,6 +1456,14 @@ transpTel :: Abs Telescope -- Γ ⊢ i.Δ
           -> Args          -- Γ ⊢ δ : Δ[0]
           -> ExceptT (Closure (Abs Type)) TCM Args      -- Γ ⊢ Δ[1]
 transpTel delta phi args = do
+  reportSDoc "tc.cubical" 40 $ vcat
+    [ "transpTel"
+    , nest 2 $ vcat
+      [ "delta = " <+> underAbstraction_ delta prettyTCM
+      , "phi   = " <+> prettyTCM phi
+      , "args  = " <+> prettyList_ (map prettyTCM args)
+      ]
+    ]
   tTransp <- liftTCM primTrans
   imin <- liftTCM primIMin
   imax <- liftTCM primIMax
@@ -1477,7 +1495,7 @@ transpTel delta phi args = do
           phi <- phi
           xi_args <- xi_args
           lift $ apply a <$> transpTel xif phi xi_args
-        s <- reduce $ getSort (absBody b')
+        s <- addContext ("i" :: String) $ reduce =<< sortOf (unEl $ absBody b')
         case s of
           Type l -> do
             l <- open $ lam_i (Level l)
@@ -1496,7 +1514,7 @@ transpTel delta phi args = do
       -- Γ,i ⊢ t
       -- Γ,i ⊢ (x : t). delta
       -- Γ ⊢ a : t[0]
-      s <- reduce $ getSort t
+      s <- reduce =<< sortOf (unEl $ unDom t)
       -- Γ ⊢ b : t[1], Γ,i ⊢ b : t[i]
       (b,bf) <- runNamesT [] $ do
         l <- case s of

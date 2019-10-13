@@ -177,7 +177,7 @@ newSortMetaCtx vs = do
     return $ MetaS x $ map Apply vs
 
 newTypeMeta' :: Comparison -> Sort -> TCM Type
-newTypeMeta' cmp s = El s . snd <$> newValueMeta RunMetaOccursCheck cmp (sort s)
+newTypeMeta' cmp s = El () . snd <$> newValueMeta RunMetaOccursCheck cmp (sort s)
 
 newTypeMeta :: Sort -> TCM Type
 newTypeMeta = newTypeMeta' CmpLeq
@@ -405,7 +405,9 @@ blockTermOnProblem t v pid =
 blockTypeOnProblem
   :: (MonadMetaSolver m, MonadFresh Nat m)
   => Type -> ProblemId -> m Type
-blockTypeOnProblem (El s a) pid = El s <$> blockTermOnProblem (El Inf $ Sort s) a pid
+blockTypeOnProblem (El _ a) pid = do
+  s <- sortOf a
+  El () <$> blockTermOnProblem (El () $ Sort s) a pid
 
 -- | @unblockedTester t@ returns @False@ if @t@ is a meta or a blocked term.
 --
@@ -1042,7 +1044,7 @@ checkSolutionForMeta x m v a = do
     IsSort{}  -> void $ do
       reportSDoc "tc.meta.check" 30 $ nest 2 $
         prettyTCM x <+> ":=" <+> prettyTCM v <+> " is a sort"
-      s <- shouldBeSort (El __DUMMY_SORT__ v)
+      s <- shouldBeSort (El () v)
       traceCall (CheckMetaSolution (getRange m) x (sort (univSort Nothing s)) (Sort s)) $
         checkSort defaultAction s
 

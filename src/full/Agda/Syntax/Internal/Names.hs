@@ -101,7 +101,7 @@ instance NamesIn (Pattern' a) where
     IApplyP _ t u _ -> namesIn (t, u)
 
 instance NamesIn a => NamesIn (Type' a) where
-  namesIn (El s t) = namesIn (s, t)
+  namesIn (El s t) = namesIn t
 
 instance NamesIn Sort where
   namesIn s = case s of

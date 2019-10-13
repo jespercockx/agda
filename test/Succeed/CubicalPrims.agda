@@ -1,4 +1,4 @@
-{-# OPTIONS --cubical #-}
+{-# OPTIONS --cubical --no-syntactic-equality #-}
 module CubicalPrims where
 
 open import Agda.Primitive renaming (_⊔_ to ℓ-max)
@@ -12,6 +12,7 @@ open import Agda.Builtin.Sigma
 open import Agda.Builtin.List
 open Helpers
 
+{-
 module _ {ℓ} {A : Set ℓ} where
   trans : {x y z : A} → x ≡ y → y ≡ z → x ≡ z
   trans {x = x} p q i = primComp (λ _ → A) (λ { j (i = i0) → x
@@ -101,26 +102,19 @@ outPartial = λ f → f itIsOne
 
 inPartial : ∀ {ℓ} {A : Set ℓ} → A → Partial i1 A
 inPartial a = λ _ → a
+-}
 
-module _ {ℓ ℓ'} {A : I → Set ℓ} {B : ∀ i → A i → Set ℓ'}
-         (let ℓ = _ ; C : I → Set ℓ ; C i = (x : A i) → B i x) where
-  compPi : (φ : I) → (u : ∀ i → Partial φ (C i)) → (a : C i0 [ φ ↦ u i0 ]) → C i1
-  compPi φ u a' x1 = primComp
-      (λ i → B i (v i)) (λ i o → u i o (v i)) (a (v i0)) where
-    a = ouc a'
-    v : (i : I) → A i
-    v i = primTransp (λ j → A (i ∨ (~ j))) i x1
-    f : ∀ i → (a : A i) → Partial φ (B i a)
-    f i a = λ { (φ = i1) → u i itIsOne a  }
-
+module _ (A : I → Set) (B : ∀ i → A i → Set)
+         (let C : I → Set ; C i = (x : A i) → B i x) where
 
   compPi' : (φ : I) → (u : ∀ i → Partial φ (C i)) → (a : C i0 [ φ ↦ u i0 ]) → C i1
   compPi' φ u a = primComp C u (ouc a)
 
   test-compPi : (φ : I) → (u : ∀ i → Partial φ (C i)) → (a : C i0 [ φ ↦ u i0 ]) →
-                  compPi φ u a ≡ compPi' φ u a
-  test-compPi = λ φ u u0 → refl
+                  compPi' φ u a ≡ compPi' φ u a
+  test-compPi φ u u0 = refl
 
+{-
 module HCompPathP {ℓ} {A : I → Set ℓ} (u : A i0) (v : A i1) (φ : I)
          (let C = PathP A u v) (p : ∀ i → Partial φ C) (p0 : C [ φ ↦ p i0 ]) where
 
@@ -359,3 +353,4 @@ trues3 = primComp (λ i → let p = trans ListNot ListNot in
 
 test-trues3 : trues3 ≡ trues
 test-trues3 = refl
+-}

@@ -44,7 +44,7 @@ instance MentionsMeta LevelAtom where
     NeutralLevel _ l -> mentionsMetas xs l
 
 instance MentionsMeta Type where
-    mentionsMetas xs (El s t) = mentionsMetas xs (s, t)
+    mentionsMetas xs (El s t) = mentionsMetas xs t
 
 instance MentionsMeta Sort where
   mentionsMetas xs s = case s of

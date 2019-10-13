@@ -134,11 +134,11 @@ sizeUniv = sort $ sizeSort
 
 -- | The built-in type @SIZE@ with user-given name.
 sizeType_ :: QName -> Type
-sizeType_ size = El sizeSort $ Def size []
+sizeType_ size = El () $ Def size []
 
 -- | The built-in type @SIZE@.
 sizeType :: (HasBuiltins m, MonadTCEnv m, ReadTCState m) => m Type
-sizeType = El sizeSort . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinSize
+sizeType = El () . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinSize
 
 -- | The name of @SIZESUC@.
 sizeSucName :: (HasBuiltins m, HasOptions m) => m (Maybe QName)

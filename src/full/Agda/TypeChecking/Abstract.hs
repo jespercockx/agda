@@ -17,6 +17,7 @@ import Agda.TypeChecking.CheckInternal
 import Agda.TypeChecking.Conversion
 import Agda.TypeChecking.Constraints
 import Agda.TypeChecking.Pretty
+import Agda.TypeChecking.Sort
 
 import Agda.Utils.Functor
 import Agda.Utils.List (splitExactlyAt)
@@ -26,7 +27,9 @@ import Agda.Utils.Impossible
 
 -- | @abstractType a v b[v] = b@ where @a : v@.
 abstractType :: Type -> Term -> Type -> TCM Type
-abstractType a v (El s b) = El (absTerm v s) <$> abstractTerm a v (sort s) b
+abstractType a v (El _ b) = do
+  s <- sortOf b -- TODO: replace with __DUMMY_SORT__?
+  El () <$> abstractTerm a v (sort s) b
 
 -- | @piAbstractTerm NotHidden v a b[v] = (w : a) -> b[w]@
 --   @piAbstractTerm Hidden    v a b[v] = {w : a} -> b[w]@
@@ -52,9 +55,8 @@ piAbstractTerm h v a b = do
 piAbstract :: WithHiding (Term, EqualityView) -> Type -> TCM Type
 piAbstract (WithHiding h (v, OtherType a))                              b = piAbstractTerm h v a b
 piAbstract (WithHiding h (prf, eqt@(EqualityType _ _ _ (Arg _ a) v _))) b = do
-  s <- inferSort a
   let prfTy = equalityUnview eqt
-      vTy   = El s a
+      vTy   = El () a
   b <- abstractType prfTy prf b
   b <- addContext ("w" :: String, defaultDom prfTy) $
          abstractType (raise 1 vTy) (unArg $ raise 1 v) b
@@ -166,7 +168,7 @@ instance AbsTerm Term where
         absT x = absTerm u x
 
 instance AbsTerm Type where
-  absTerm u (El s v) = El (absTerm u s) (absTerm u v)
+  absTerm u (El s v) = El () (absTerm u v)
 
 instance AbsTerm Sort where
   absTerm u s = case s of
@@ -229,6 +231,9 @@ swap01 = applySubst $ var 1 :# liftS 1 (raiseS 1)
 
 class EqualSy a where
   equalSy :: a -> a -> Bool
+
+instance (EqualSy a, EqualSy b) => EqualSy (a,b) where
+  equalSy (x,y) (x',y') = equalSy x x' && equalSy y y'
 
 instance EqualSy a => EqualSy [a] where
   equalSy us vs = and $ (length us == length vs) : zipWith equalSy us vs

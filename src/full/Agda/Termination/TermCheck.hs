@@ -685,7 +685,7 @@ instance ExtractCalls Sort where
 -- | Extract recursive calls from a type.
 
 instance ExtractCalls Type where
-  extract (El s t) = extract (s, t)
+  extract (El s t) = extract t
 
 -- | Extract recursive calls from a constructor application.
 

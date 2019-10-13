@@ -125,9 +125,9 @@ tomy imi icns typs = do
        let pars n (I.El _ (I.Pi it typ)) = Cm.Arg (I.domInfo it) (I.var n) :
                                            pars (n - 1) (I.unAbs typ)
            pars _ (I.El _ _) = []
-           contyp npar I.EmptyTel = I.El (I.mkType 0 {- arbitrary -}) $
+           contyp npar I.EmptyTel = I.El () $
                                       I.Def cn $ map I.Apply $ pars (npar - 1) typ
-           contyp npar (I.ExtendTel it (I.Abs v tel)) = I.El (I.mkType 0 {- arbitrary -}) (I.Pi it (I.Abs v (contyp (npar + 1) tel)))
+           contyp npar (I.ExtendTel it (I.Abs v tel)) = I.El () (I.Pi it (I.Abs v (contyp (npar + 1) tel)))
            contyp npar (I.ExtendTel it I.NoAbs{})     = __IMPOSSIBLE__
        contyp' <- convert $ contyp 0 tel
        cc <- lift $ liftIO $ readIORef c
@@ -475,8 +475,7 @@ instance Conversion MOT a b => Conversion MOT (Abs a) (I.Abs b) where
            Id id -> id
 
 instance Conversion MOT (Exp O) I.Type where
-  convert e = I.El (I.mkType 0) <$> convert e
-              -- 0 is arbitrary, sort not read by Agda when reifying
+  convert e = I.El () <$> convert e
 
 instance Conversion MOT (Exp O) I.Term where
   convert e = case e of

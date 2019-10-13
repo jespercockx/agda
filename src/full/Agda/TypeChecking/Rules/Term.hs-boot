@@ -6,7 +6,7 @@ import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Internal
 import Agda.TypeChecking.Monad.Base
 
-isType_ :: A.Expr -> TCM Type
+isType_ :: A.Expr -> TCM (Sort , Type)
 
 checkExpr :: A.Expr -> Type -> TCM Term
 checkExpr' :: Comparison -> A.Expr -> Type -> TCM Term

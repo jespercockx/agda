@@ -14,6 +14,7 @@ import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 
@@ -39,7 +40,7 @@ telePiPath reAbs tel t bs = do
     argH = Arg $ setHiding Hidden defaultArgInfo
     getLevel :: Abs Type -> TCM Level
     getLevel b = do
-      s <- reduce $ getSort <$> b
+      s <- reduce =<< traverse (sortOf . unEl) b
       case s of
         NoAbs _ (Type l) -> return l
         Abs n (Type l) | not (freeIn 0 s) -> return $ noabsApp __IMPOSSIBLE__ (Abs n l)
@@ -54,7 +55,7 @@ telePiPath reAbs tel t bs = do
             -- assume a = 𝕀
             b <- b
             l <- getLevel b
-            return $ El (Type l) $
+            return $ El () $
               pp `apply` [ argH (Level l)
                          , argN (Lam defaultArgInfo (unEl <$> b))
                          , argN $ fst u
@@ -62,7 +63,7 @@ telePiPath reAbs tel t bs = do
                          ]
           Nothing    -> do
             b <- b
-            return $ El (piSort a (getSort <$> b)) (Pi a (reAbs b))
+            return $ El () (Pi a (reAbs b))
       where
         b  = traverse (telePiPath xs) tel
     telePiPath _     EmptyTel = __IMPOSSIBLE__

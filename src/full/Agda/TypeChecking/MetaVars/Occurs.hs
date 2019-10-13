@@ -494,18 +494,18 @@ instance Occurs LevelAtom where
 
 
 instance Occurs Type where
-  occurs (El s v) = uncurry El <$> occurs (s,v)
+  occurs (El s v) = El () <$> occurs v
 
-  metaOccurs m (El s v) = metaOccurs m (s,v)
+  metaOccurs m (El s v) = metaOccurs m v
 
 instance Occurs Sort where
   occurs s = do
     unfold s >>= \case
       PiSort a s2 -> do
-        s1' <- flexibly $ occurs $ getSort a
-        a'  <- (a $>) . El s1' <$> do flexibly $ occurs $ unEl $ unDom a
+        s1' <- flexibly $ occurs $ fst $ unDom a
+        a'  <- (a $>) . El () <$> do flexibly $ occurs $ unEl $ snd $ unDom a
         s2' <- mapAbstraction a' (flexibly . occurs) s2
-        return $ PiSort a' s2'
+        return $ PiSort ((s1',) <$> a') s2'
       Type a     -> Type <$> occurs a
       Prop a     -> Prop <$> occurs a
       s@Inf      -> return s
@@ -731,7 +731,7 @@ instance AnyRigid Term where
       Dummy{}    -> return False
 
 instance AnyRigid Type where
-  anyRigid f (El s t) = anyRigid f (s,t)
+  anyRigid f (El s t) = anyRigid f t
 
 instance AnyRigid Sort where
   anyRigid f s =

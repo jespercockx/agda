@@ -110,7 +110,7 @@ recordModule = mnameFromList . qnameToList
 --   does not refer to a record or the record is abstract.
 getRecordDef :: (HasConstInfo m, ReadTCState m, MonadError TCErr m) => QName -> m Defn
 getRecordDef r = maybe err return =<< isRecord r
-  where err = typeError $ ShouldBeRecordType (El __DUMMY_SORT__ $ Def r [])
+  where err = typeError $ ShouldBeRecordType (El () $ Def r [])
 
 -- | Get the record name belonging to a field name.
 getRecordOfField :: QName -> TCM (Maybe QName)

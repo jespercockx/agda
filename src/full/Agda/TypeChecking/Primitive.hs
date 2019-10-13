@@ -31,6 +31,7 @@ import Agda.TypeChecking.Monad hiding (getConstInfo, typeOfConst)
 import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Reduce.Monad as Reduce
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Level
@@ -87,8 +88,8 @@ instance (PrimType a, PrimType b) => PrimTerm (a, b) where
     let sig = Def (sigmaName sigKit) []
     a'       <- primType (undefined :: a)
     b'       <- primType (undefined :: b)
-    Type la  <- pure $ getSort a'
-    Type lb  <- pure $ getSort b'
+    Type la  <- sortOf $ unEl a'
+    Type lb  <- sortOf $ unEl b'
     pure sig <#> pure (Level la)
              <#> pure (Level lb)
              <@> pure (unEl a')
@@ -371,8 +372,8 @@ mkPrimInjective a b qn = do
   -- Define the type
   eqName <- primEqualityName
   let lvl0     = ClosedLevel 0
-  let eq a t u = El (Type lvl0) <$> pure (Def eqName []) <#> pure (Level lvl0)
-                                <#> pure (unEl a) <@> t <@> u
+  let eq a t u = El () <$> pure (Def eqName []) <#> pure (Level lvl0)
+                       <#> pure (unEl a) <@> t <@> u
   let f    = pure (Def qn [])
   ty <- nPi "t" (pure a) $ nPi "u" (pure a) $
               (eq b (f <@> varM 1) (f <@> varM 0))
@@ -464,7 +465,7 @@ primEraseEquality = do
 
   -- Construct the type of primEraseEquality, e.g.
   -- @{a : Level} {A : Set a} {x y : A} → eq {a} {A} x y -> eq {a} {A} x y@.
-  t <- let xeqy = pure $ El eqSort $ Def eq $ map Apply $ teleArgs eqTel in
+  t <- let xeqy = pure $ El () $ Def eq $ map Apply $ teleArgs eqTel in
        telePi_ (fmap hide eqTel) <$> (xeqy --> xeqy)
 
   -- Get the constructor corresponding to BUILTIN REFL
@@ -508,7 +509,7 @@ getReflArgInfo rf = do
 -- | Used for both @primForce@ and @primForceLemma@.
 genPrimForce :: TCM Type -> (Term -> Arg Term -> Term) -> TCM PrimitiveImpl
 genPrimForce b ret = do
-  let varEl s a = El (varSort s) <$> a
+  let varEl s a = El () <$> a
       varT s a  = varEl s (varM a)
       varS s    = pure $ sort $ varSort s
   t <- hPi "a" (el primLevel) $
@@ -545,7 +546,7 @@ genPrimForce b ret = do
 
 primForce :: TCM PrimitiveImpl
 primForce = do
-  let varEl s a = El (varSort s) <$> a
+  let varEl s a = El () <$> a
       varT s a  = varEl s (varM a)
       varS s    = pure $ sort $ varSort s
   genPrimForce (nPi "x" (varT 3 1) $
@@ -555,7 +556,7 @@ primForce = do
 
 primForceLemma :: TCM PrimitiveImpl
 primForceLemma = do
-  let varEl s a = El (varSort s) <$> a
+  let varEl s a = El () <$> a
       varT s a  = varEl s (varM a)
       varS s    = pure $ sort $ varSort s
   refl  <- primRefl

@@ -34,7 +34,7 @@ data LevelKit = LevelKit
 
 -- | Get the 'primLevel' as a 'Type'.
 levelType :: (HasBuiltins m) => m Type
-levelType = El (mkType 0) . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
+levelType = El () . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
 
 isLevelType :: (HasBuiltins m, MonadReduce m) => Type -> m Bool
 isLevelType a = reduce (unEl a) >>= \case

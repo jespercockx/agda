@@ -136,6 +136,7 @@ import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Free
 import Agda.TypeChecking.Free.Reduce
 import Agda.TypeChecking.Records
+import Agda.TypeChecking.Sort
 
 import Agda.TypeChecking.Rules.LHS.Problem
 
@@ -629,8 +630,9 @@ basicUnifyStrategy k s = do
 dataStrategy :: Int -> UnifyStrategy
 dataStrategy k s = do
   Equal Dom{unDom = a} u v <- liftTCM $ eqConstructorForm =<< eqUnLevel =<< reduce (getEqualityUnraised k s)
+  sa <- sortOf $ unEl a
   case unEl a of
-    Def d es | Type{} <- getSort a -> do
+    Def d es | Type{} <- sa -> do
       npars <- catMaybesMP $ liftTCM $ getNumberOfParameters d
       let (pars,ixs) = splitAt npars $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
       hpars <- fromMaybeMP $ isHom k pars
@@ -786,7 +788,8 @@ injectivePragmaStrategy k s = do
 skipIrrelevantStrategy :: Int -> UnifyStrategy
 skipIrrelevantStrategy k s = do
   let Equal a _ _ = getEquality k s  -- reduce not necessary
-  guard =<< isIrrelevantOrPropM a    -- reduction takes place here
+  addContext (varTel s `abstract` eqTel s) $
+    guard =<< isIrrelevantOrPropM a  -- reduction takes place here
   return $ SkipIrrelevantEquation k
 
 

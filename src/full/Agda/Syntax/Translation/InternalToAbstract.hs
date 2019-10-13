@@ -1256,7 +1256,7 @@ instance Reify Sort Expr where
           return $ A.Def sizeU
         I.PiSort a s -> do
           pis <- freshName_ ("piSort" :: String) -- TODO: hack
-          (e1,e2) <- reify (getSort a, I.Lam defaultArgInfo $ fmap Sort s)
+          (e1,e2) <- reify (fst $ unDom a, I.Lam defaultArgInfo $ fmap Sort s)
           let app x y = A.App defaultAppInfo_ x (defaultNamedArg y)
           return $ A.Var pis `app` e1 `app` e2
         I.UnivSort s -> do

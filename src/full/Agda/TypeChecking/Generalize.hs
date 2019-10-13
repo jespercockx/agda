@@ -35,6 +35,7 @@ import Agda.TypeChecking.InstanceArguments (postponeInstanceConstraints)
 import Agda.TypeChecking.MetaVars
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Warnings
 
@@ -690,7 +691,7 @@ createGenValue x = setCurrentRange x $ do
 -- | Create a not-yet correct record type for the generalized telescope. It's not yet correct since
 --   we haven't computed the telescope yet, and we need the record type to do it.
 createGenRecordType :: Type -> [MetaId] -> TCM (QName, ConHead, [QName])
-createGenRecordType genRecMeta@(El genRecSort _) sortedMetas = do
+createGenRecordType genRecMeta@(El _ _) sortedMetas = do
   current <- currentModule
   let freshQName s = qualify current <$> freshName_ (s :: String)
       mkFieldName  = freshQName . (generalizedFieldName ++) <=< getMetaNameSuggestion
@@ -700,6 +701,7 @@ createGenRecordType genRecMeta@(El genRecSort _) sortedMetas = do
                   { conName      = con
                   , conInductive = Inductive
                   , conFields    = genRecFields }
+  genRecSort   <- sortOf $ unEl genRecMeta
   forM_ (zip sortedMetas genRecFields) $ \ (meta, fld) -> do
     fieldTy <- getMetaType meta
     let field = unArg fld
@@ -755,7 +757,7 @@ createGenRecordType genRecMeta@(El genRecSort _) sortedMetas = do
     [ text "created genRec" <+> text (show genRecFields) ]
   -- Solve the genRecMeta
   args <- getContextArgs
-  let genRecTy = El genRecSort $ Def genRecName $ map Apply args
+  let genRecTy = El () $ Def genRecName $ map Apply args
   noConstraints $ equalType genRecTy genRecMeta
   return (genRecName, genRecCon, map unArg genRecFields)
 
@@ -767,10 +769,9 @@ fillInGenRecordDetails name con fields recTy fieldTel = do
   -- Field types
   let mkFieldTypes [] EmptyTel = []
       mkFieldTypes (fld : flds) (ExtendTel ty ftel) =
-          abstract cxtTel (El s $ Pi (defaultDom recTy) (Abs "r" $ unDom ty)) :
+          abstract cxtTel (El () $ Pi (defaultDom recTy) (Abs "r" $ unDom ty)) :
           mkFieldTypes flds (absApp ftel proj)
         where
-          s = PiSort (defaultDom recTy) (Abs "r" $ getSort ty)
           proj = Var 0 [Proj ProjSystem fld]
       mkFieldTypes _ _ = __IMPOSSIBLE__
   let fieldTypes = mkFieldTypes fields (raise 1 fieldTel)

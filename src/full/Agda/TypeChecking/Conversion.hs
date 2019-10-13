@@ -37,6 +37,7 @@ import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Injectivity
 import Agda.TypeChecking.Polarity
 import Agda.TypeChecking.SizedTypes
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Level
 import Agda.TypeChecking.Implicit (implicitArgs)
 import Agda.TypeChecking.Irrelevance
@@ -242,7 +243,7 @@ compareTerm' cmp a m n =
       [ "compareTerm", prettyTCM m, prettyTCM cmp, prettyTCM n, ":", prettyTCM a' ]
     propIrr  <- isPropEnabled
     isSize   <- isJust <$> isSizeType a'
-    s        <- reduce $ getSort a'
+    s        <- reduce =<< sortOf (unEl a')
     mlvl     <- getBuiltin' builtinLevel
     reportSDoc "tc.conv.level" 60 $ nest 2 $ sep
       [ "a'   =" <+> pretty a'
@@ -314,7 +315,7 @@ compareTerm' cmp a m n =
        mp <- fmap getPrimName <$> getBuiltin' builtinIsOne
        case unEl $ unDom dom of
           Def q [Apply phi]
-              | Just q == mp -> compareTermOnFace cmp (unArg phi) (El s (Pi (dom {domFinite = False}) b)) m n
+              | Just q == mp -> compareTermOnFace cmp (unArg phi) (El () (Pi (dom {domFinite = False}) b)) m n
           _                  -> equalFun s (Pi (dom{domFinite = False}) b) m n
     equalFun _ (Pi dom@Dom{domInfo = info} b) m n | not $ domFinite dom = do
         let name = suggests [ Suggestion b , Suggestion m , Suggestion n ]
@@ -419,7 +420,7 @@ compareAtom cmp t m n =
   verboseBracket "tc.conv.atom" 20 "compareAtom" $
   -- if a PatternErr is thrown, rebuild constraint!
   (catchConstraint (ValueCmp cmp t m n) :: m () -> m ()) $ do
-    reportSDoc "tc.conv.atom" 50 $
+    reportSDoc "tc.conv.atom" 10 $
       "compareAtom" <+> fsep [ prettyTCM m <+> prettyTCM cmp
                              , prettyTCM n
                              , prettyTCM t
@@ -427,10 +428,15 @@ compareAtom cmp t m n =
     -- Andreas: what happens if I cut out the eta expansion here?
     -- Answer: Triggers issue 245, does not resolve 348
     (mb',nb') <- ifM (asksTC envCompareBlocked) ((notBlocked -*- notBlocked) <$> reduce (m,n)) $ do
+      reportSDoc "tc.conv" 10 $ "Point a"
       mb' <- etaExpandBlocked =<< reduceB m
-      nb' <- etaExpandBlocked =<< reduceB n
+      reportSDoc "tc.conv" 10 $ "Point b"
+      n1 <- reduceB n
+      reportSDoc "tc.conv" 10 $ "Point b2"
+      nb' <- etaExpandBlocked n1
+      reportSDoc "tc.conv" 10 $ "Point c"
       return (mb', nb')
-
+    reportSDoc "tc.conv" 10 $ "Point 1"
     -- constructorForm changes literal to constructors
     -- only needed if the other side is not a literal
     (mb'', nb'') <- case (ignoreBlocking mb', ignoreBlocking nb') of
@@ -438,10 +444,16 @@ compareAtom cmp t m n =
       _ -> (,) <$> traverse constructorForm mb'
                <*> traverse constructorForm nb'
 
+    reportSDoc "tc.conv" 10 $ "Point 2"
     mb <- traverse unLevel mb''
     nb <- traverse unLevel nb''
 
+    reportSDoc "tc.conv" 10 $ "Point 3"
+
     cmpBlocked <- viewTC eCompareBlocked
+
+
+    reportSDoc "tc.conv" 10 $ "Point 4"
 
     let m = ignoreBlocking mb
         n = ignoreBlocking nb
@@ -466,6 +478,8 @@ compareAtom cmp t m n =
 
         assign dir x es v = assignE dir x es v $ compareAtomDir dir t
 
+    reportSDoc "tc.conv" 10 $ "Point 5"
+
     reportSDoc "tc.conv.atom" 30 $
       "compareAtom" <+> fsep [ prettyTCM mb <+> prettyTCM cmp
                              , prettyTCM nb
@@ -475,6 +489,9 @@ compareAtom cmp t m n =
       "compareAtom" <+> fsep [ (text . show) mb <+> prettyTCM cmp
                                   , (text . show) nb
                                   , ":" <+> (text . show) t ]
+
+    reportSDoc "tc.conv" 10 $ "Point 6"
+
     case (mb, nb) of
       -- equate two metas x and y.  if y is the younger meta,
       -- try first y := x and then x := y
@@ -599,11 +616,11 @@ compareAtom cmp t m n =
               -- since b and b' should be neutral terms, but it's a
               -- precondition for the compareAtom call to make
               -- sense.
-              equalType (El Inf $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA,phi,u])
-                        (El Inf $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA',phi',u'])
-              compareAtom cmp (AsTermsOf $ El Inf $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA,phi,u])
+              equalType (El () $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA,phi,u])
+                        (El () $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA',phi',u'])
+              compareAtom cmp (AsTermsOf $ El () $ apply tSub $ [a] ++ map (setHiding NotHidden) [bA,phi,u])
                               (unArg x) (unArg x')
-              compareElims [] [] (El (tmSort (unArg a)) (unArg bA)) (Def q as) bs bs'
+              compareElims [] [] (El () (unArg bA)) (Def q as) bs bs'
               return True
             _  -> return False
         compareUnglueApp q es es' = do
@@ -618,9 +635,9 @@ compareAtom cmp t m n =
               -- sense.
               -- equalType (El (tmSort (unArg lb)) $ apply tGlue $ [la,lb] ++ map (setHiding NotHidden) [bA,phi,bT,e])
               --           (El (tmSort (unArg lb')) $ apply tGlue $ [la',lb'] ++ map (setHiding NotHidden) [bA',phi',bT',e'])
-              compareAtom cmp (AsTermsOf $ El (tmSort (unArg lb)) $ apply tGlue $ [la,lb] ++ map (setHiding NotHidden) [bA,phi,bT,e])
+              compareAtom cmp (AsTermsOf $ El () $ apply tGlue $ [la,lb] ++ map (setHiding NotHidden) [bA,phi,bT,e])
                               (unArg b) (unArg b')
-              compareElims [] [] (El (tmSort (unArg la)) (unArg bA)) (Def q as) bs bs'
+              compareElims [] [] (El () (unArg bA)) (Def q as) bs bs'
               return True
             _  -> return False
         compareUnglueUApp :: MonadConversion m => QName -> Elims -> Elims -> m Bool
@@ -638,9 +655,9 @@ compareAtom cmp t m n =
               bA <- runNamesT [] $ do
                 [la,phi,bT,bAS] <- mapM (open . unArg) [la,phi,bT,bAS]
                 (pure tSubOut <#> (pure tLSuc <@> la) <#> (Sort . tmSort <$> la) <#> phi <#> (bT <@> primIZero) <@> bAS)
-              compareAtom cmp (AsTermsOf $ El (tmSort . unArg $ sucla) $ apply tHComp $ [sucla, argH (Sort s), phi] ++ [argH (unArg bT), argH bA])
+              compareAtom cmp (AsTermsOf $ El () $ apply tHComp $ [sucla, argH (Sort s), phi] ++ [argH (unArg bT), argH bA])
                               (unArg b) (unArg b')
-              compareElims [] [] (El s bA) (Def q as) bs bs'
+              compareElims [] [] (El () bA) (Def q as) bs bs'
               return True
             _  -> return False
         -- Andreas, 2013-05-15 due to new postponement strategy, type can now be blocked
@@ -766,7 +783,9 @@ antiUnify pid a u v = do
     fallback = blockTermOnProblem a u pid
 
 antiUnifyType :: MonadConversion m => ProblemId -> Type -> Type -> m Type
-antiUnifyType pid (El s a) (El _ b) = workOnTypes $ El s <$> antiUnify pid (sort s) a b
+antiUnifyType pid (El _ a) (El _ b) = do
+  s <- sortOf a -- TODO: can we use __DUMMY_SORT__ instead?
+  workOnTypes $ El () <$> antiUnify pid (sort s) a b
 
 antiUnifyElims :: MonadConversion m => ProblemId -> Type -> Term -> Elims -> Elims -> m Term
 antiUnifyElims pid a self [] [] = return self
@@ -1007,18 +1026,20 @@ compareArgs pol for a v args1 args2 =
 
 -- | Equality on Types
 compareType :: MonadConversion m => Comparison -> Type -> Type -> m ()
-compareType cmp ty1@(El s1 a1) ty2@(El s2 a2) =
+compareType cmp ty1@(El _ a1) ty2@(El _ a2) =
     workOnTypes $
     verboseBracket "tc.conv.type" 20 "compareType" $
     catchConstraint (TypeCmp cmp ty1 ty2) $ do
         reportSDoc "tc.conv.type" 50 $ vcat
           [ "compareType" <+> sep [ prettyTCM ty1 <+> prettyTCM cmp
                                        , prettyTCM ty2 ]
-          , hsep [ "   sorts:", prettyTCM s1, " and ", prettyTCM s2 ]
+          --, hsep [ "   sorts:", prettyTCM s1, " and ", prettyTCM s2 ]
           ]
         compareAs cmp AsTypes a1 a2
         unlessM ((optCumulativity <$> pragmaOptions) `or2M`
-                 (not . optCompareSorts <$> pragmaOptions)) $
+                 (not . optCompareSorts <$> pragmaOptions)) $ do
+          s1 <- sortOf a1
+          s2 <- sortOf a2
           compareSort CmpEq s1 s2
         return ()
 
@@ -1559,9 +1580,9 @@ equalSort s1 s2 = do
 
             -- @PiSort a b == SizeUniv@ iff @b == SizeUniv@
             (SizeUniv   , PiSort a b ) ->
-              underAbstraction a b $ equalSort SizeUniv
+              underAbstraction (snd <$> a) b $ equalSort SizeUniv
             (PiSort a b , SizeUniv   ) ->
-              underAbstraction a b $ equalSort SizeUniv
+              underAbstraction (snd <$> a) b $ equalSort SizeUniv
 
             -- @Prop0@ and @SizeUniv@ don't contain any universes,
             -- so they cannot be a UnivSort
@@ -1597,7 +1618,7 @@ equalSort s1 s2 = do
       -- equate @piSort a b@ to @s0@, which is assumed to be a (closed) bottom sort
       -- i.e. @piSort a b == s0@ implies @b == s0@.
       piSortEqualsBottom s0 a b = do
-        underAbstraction a b $ equalSort s0
+        underAbstraction (snd <$> a) b $ equalSort s0
         -- we may have instantiated some metas, so @a@ could reduce
         a <- reduce a
         case funSort' a s0 of

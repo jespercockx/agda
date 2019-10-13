@@ -65,6 +65,7 @@ import Agda.TypeChecking.Patterns.Abstract
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Records hiding (getRecordConstructor)
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Primitive hiding (Nat)
@@ -863,7 +864,7 @@ splitStrategy = filter shouldSplit
 
 -- | The loop (tail-recursive): split at a variable in the problem until problem is solved
 checkLHS
-  :: forall tcm a. (MonadTCM tcm, MonadReduce tcm, MonadAddContext tcm, MonadWriter Blocked_ tcm, HasConstInfo tcm, MonadError TCErr tcm, MonadDebug tcm, MonadReader Nat tcm)
+  :: forall tcm a. (MonadTCM tcm, MonadReduce tcm, MonadAddContext tcm, MonadWriter Blocked_ tcm, HasBuiltins tcm, HasConstInfo tcm, MonadError TCErr tcm, MonadDebug tcm, MonadReader Nat tcm)
   => Maybe QName      -- ^ The name of the definition we are checking.
   -> LHSState a       -- ^ The current state.
   -> tcm a
@@ -1778,20 +1779,23 @@ checkParameters dc d pars = liftTCM $ do
       compareArgs [] [] t (Def d []) vs (take (length vs) pars)
     _ -> __IMPOSSIBLE__
 
-checkSortOfSplitVar :: (MonadTCM m, MonadReduce m, MonadError TCErr m, ReadTCState m, LensSort a)
-                    => DataOrRecord -> a -> Maybe (Arg Type) -> m ()
+checkSortOfSplitVar :: (MonadTCM m, MonadReduce m, MonadAddContext m, HasBuiltins m, HasConstInfo m, MonadError TCErr m, ReadTCState m)
+                    => DataOrRecord -> Type -> Maybe (Arg Type) -> m ()
 checkSortOfSplitVar dr a mtarget = do
   infOk <- optOmegaInOmega <$> pragmaOptions
-  liftTCM (reduce $ getSort a) >>= \case
+  liftTCM (reduce =<< sortOf (unEl a)) >>= \case
     Type{} -> return ()
     Prop{}
       | IsRecord <- dr         -> return ()
-      | Just target <- mtarget -> unlessM (isPropM target) splitOnPropError
+      | Just target <- mtarget -> do
+          starget <- sortOf $ unEl $ unArg target
+          unlessM (isPropM starget) splitOnPropError
       | otherwise              -> splitOnPropError
     Inf{} | infOk -> return ()
     _      -> softTypeError =<< do
+      sa <- sortOf $ unEl a
       liftTCM $ GenericDocError <$> sep
-        [ "Cannot split on datatype in sort" , prettyTCM (getSort a) ]
+        [ "Cannot split on datatype in sort" , prettyTCM sa ]
 
   where
     splitOnPropError = softTypeError $ GenericError

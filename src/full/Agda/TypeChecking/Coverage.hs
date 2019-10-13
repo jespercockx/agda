@@ -53,6 +53,7 @@ import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Records
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Telescope.Path
 import Agda.TypeChecking.MetaVars
@@ -308,7 +309,7 @@ cover f cs sc@(SClause tel ps _ _ target) = updateRelevance $ do
     , nest 2 $ "tel  =" <+> prettyTCM tel
     , nest 2 $ "ps   =" <+> do addContext tel $ prettyTCMPatternList $ fromSplitPatterns ps
     , nest 2 $ "target =" <+> do addContext tel $ maybe (text "<none>") prettyTCM target
-    , nest 2 $ "target sort =" <+> do addContext tel $ maybe (text "<none>") (prettyTCM . getSort . unArg) target
+    --, nest 2 $ "target sort =" <+> do addContext tel $ maybe (text "<none>") (prettyTCM . getSort . unArg) target
     ]
   match cs ps >>= \case
     Yes (i,mps) -> do
@@ -593,8 +594,8 @@ createMissingHCompClause f n x old_sc (SClause tel ps _sigma' cps (Just t)) = se
       -- with Δ' and ps' introduced by fixTarget.
       -- So final clause will be:
       -- tel ⊢ ps ↦ rhs_we_define{wkS ..} ps'
-      getLevel t = do
-        s <- reduce $ getSort t
+      getLevel s = do
+        s <- reduce s
         case s of
           Type l -> pure (Level l)
           s      -> do
@@ -683,7 +684,7 @@ createMissingHCompClause f n x old_sc (SClause tel ps _sigma' cps (Just t)) = se
             let
               [phi,u,u0] = map (pure . var) [2,1,0]
               htype = pure $ unEl . unDom $ hdom
-              lvl = getLevel $ unDom hdom
+            lvl <- getLevel <$> sortOf (unEl $ unDom hdom)
             hc <- pure tHComp <#> lvl <#> htype
                                       <#> phi
                                       <@> u
@@ -692,7 +693,7 @@ createMissingHCompClause f n x old_sc (SClause tel ps _sigma' cps (Just t)) = se
           -- Γ,φ,u,u0,Δ(x = hcomp phi u u0) ⊢ raise 3+|Δ| hdom
           hdom <- pure $ raise (3+size delta) hdom
           htype <- open $ unEl . unDom $ hdom
-          lvl <- open =<< (lift . getLevel $ unDom hdom)
+          lvl <- open =<< (lift $ getLevel =<< sortOf (unEl $ unDom hdom))
 
           -- Γ,φ,u,u0,Δ(x = hcomp phi u u0) ⊢
           [phi,u,u0] <- mapM (open . raise (size delta) . var) [2,1,0]
@@ -723,7 +724,7 @@ createMissingHCompClause f n x old_sc (SClause tel ps _sigma' cps (Just t)) = se
                     lift $ piApplyM hd $ [Arg (domInfo hdom) v] ++ args
           ty_level <- do
             t <- bind "i" ty
-            s <- reduce $ getSort (absBody t)
+            s <- reduce =<< sortOf (unEl $ absBody t)
             reportSDoc "tc.cover.hcomp" 20 $ text "ty_level, s = " <+> prettyTCM s
             case s of
               Type l -> open =<< (lam "i" $ \ _ -> pure $ Level l)
@@ -1353,8 +1354,9 @@ split' checkEmpty ind allowPartialCover fixtarget
   -- Andreas, 2018-10-27, issue #3324; use isPropM.
   -- Need to reduce sort to decide on Prop.
   -- Cannot split if domain is a Prop but target is relevant.
-  propArrowRel <- isPropM t `and2M`
-    maybe (return True) (not <.> isPropM) target
+  st <- sortOf $ unEl $ unDom t
+  propArrowRel <- isPropM st `and2M`
+    maybe (return True) (\target -> not <$> (isPropM =<< sortOf (unEl $ unArg target))) target
 
   mHCompName <- getPrimitiveName' builtinHComp
 

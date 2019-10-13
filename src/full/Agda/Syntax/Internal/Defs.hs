@@ -73,7 +73,7 @@ instance GetDefs MetaId where
   getDefs x = doMeta x
 
 instance GetDefs Type where
-  getDefs (El s t) = getDefs s >> getDefs t
+  getDefs (El s t) = getDefs t
 
 instance GetDefs Sort where
   getDefs s = case s of

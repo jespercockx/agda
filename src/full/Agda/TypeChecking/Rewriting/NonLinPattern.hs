@@ -26,6 +26,7 @@ import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Records
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Sort
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 
@@ -74,9 +75,10 @@ instance (PatternFrom t a b) => PatternFrom t (Dom a) (Dom b) where
   patternFrom r k t = traverse $ patternFrom r k t
 
 instance PatternFrom () Type NLPType where
-  patternFrom r k _ a = workOnTypes $
-    NLPType <$> patternFrom r k () (getSort a)
-            <*> patternFrom r k (sort $ getSort a) (unEl a)
+  patternFrom r k _ a = workOnTypes $ do
+    s <- sortOf $ unEl a
+    NLPType <$> patternFrom r k () s
+            <*> patternFrom r k (sort s) (unEl a)
 
 instance PatternFrom () Sort NLPSort where
   patternFrom r k _ s = do
@@ -208,7 +210,7 @@ instance NLPatToTerm NLPat Level where
   nlPatToTerm = nlPatToTerm >=> levelView
 
 instance NLPatToTerm NLPType Type where
-  nlPatToTerm (NLPType s a) = El <$> (nlPatToTerm s) <*> nlPatToTerm a
+  nlPatToTerm (NLPType s a) = El () <$> nlPatToTerm a
 
 instance NLPatToTerm NLPSort Sort where
   nlPatToTerm (PType l) = Type <$> nlPatToTerm l

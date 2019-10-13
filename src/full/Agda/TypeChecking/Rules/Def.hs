@@ -835,8 +835,7 @@ checkRHS i x aps t lhsResult@(LHSResult _ delta ps absurdPat trhs _ _asb _) rhs0
       t' <- reduce =<< instantiateFull eqt
       (eqt,rewriteType,rewriteFrom,rewriteTo) <- equalityView t' >>= \case
         eqt@(EqualityType _s _eq _params (Arg _ dom) a b) -> do
-          s <- inferSort dom
-          return (eqt, El s dom, unArg a, unArg b)
+          return (eqt, El () dom, unArg a, unArg b)
           -- Note: the sort _s of the equality need not be the sort of the type @dom@!
         OtherType{} -> typeError . GenericDocError =<< do
           "Cannot rewrite by equation of type" <+> prettyTCM t'

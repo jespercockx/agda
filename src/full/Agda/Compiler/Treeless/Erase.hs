@@ -316,7 +316,7 @@ getTypeInfo t0 = do
         Nothing ->
           case I.theDef def of
             I.Function{ funClauses = cs } ->
-              sumTypeInfo <$> mapM (maybe (return Empty) (getTypeInfo . El __DUMMY_SORT__) . clauseBody) cs
+              sumTypeInfo <$> mapM (maybe (return Empty) (getTypeInfo . El ()) . clauseBody) cs
             _ -> return NotErasable
   -- | The backend also has a say whether a type is eraseable or not.
   erasureForbidden :: QName -> E Bool

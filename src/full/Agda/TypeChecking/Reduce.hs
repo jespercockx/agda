@@ -147,7 +147,7 @@ instance Instantiate a => Instantiate (Blocked a) where
       PostponedTypeCheckingProblem{} -> return v
 
 instance Instantiate Type where
-    instantiate' (El s t) = El <$> instantiate' s <*> instantiate' t
+    instantiate' (El s t) = El () <$> instantiate' t
 
 instance Instantiate Sort where
   instantiate' s = case s of
@@ -169,8 +169,8 @@ instance Instantiate t => Instantiate (Abs t) where
 instance Instantiate t => Instantiate (Arg t) where
     instantiate' = traverse instantiate'
 
-instance Instantiate t => Instantiate (Dom t) where
-    instantiate' = traverse instantiate'
+instance (Instantiate t, Instantiate e) => Instantiate (Dom' t e) where
+    instantiate' (Dom i fin n tac x) = Dom i fin n (instantiate' tac) (instantiate' x)
 
 instance Instantiate t => Instantiate (Maybe t) where
   instantiate' = traverse instantiate'
@@ -233,7 +233,7 @@ instance Instantiate EqualityView where
   instantiate' (OtherType t)            = OtherType
     <$> instantiate' t
   instantiate' (EqualityType s eq l t a b) = EqualityType
-    <$> instantiate' s
+    <$> return ()
     <*> return eq
     <*> mapM instantiate' l
     <*> instantiate' t
@@ -793,7 +793,7 @@ instance Reduce EqualityView where
   reduce' (OtherType t)            = OtherType
     <$> reduce' t
   reduce' (EqualityType s eq l t a b) = EqualityType
-    <$> reduce' s
+    <$> return ()
     <*> return eq
     <*> mapM reduce' l
     <*> reduce' t
@@ -838,7 +838,7 @@ simplifyBlocked' (Blocked _ t) = return t
 simplifyBlocked' (NotBlocked _ t) = simplify' t  -- Andrea(s), 2014-12-05 OK?
 
 instance Simplify Type where
-    simplify' (El s t) = El <$> simplify' s <*> simplify' t
+    simplify' (El s t) = El () <$> simplify' t
 
 instance Simplify Elim where
   simplify' (Apply v) = Apply <$> simplify' v
@@ -971,7 +971,7 @@ instance Simplify EqualityView where
   simplify' (OtherType t)            = OtherType
     <$> simplify' t
   simplify' (EqualityType s eq l t a b) = EqualityType
-    <$> simplify' s
+    <$> return ()
     <*> return eq
     <*> mapM simplify' l
     <*> simplify' t
@@ -1005,7 +1005,7 @@ instance Normalise Sort where
         DummyS{}   -> return s
 
 instance Normalise Type where
-    normalise' (El s t) = El <$> normalise' s <*> normalise' t
+    normalise' (El s t) = El () <$> normalise' t
 
 instance Normalise Term where
     normalise' v = ifM shouldTryFastReduce (fastNormalise v) (slowNormaliseArgs =<< reduce' v)
@@ -1148,7 +1148,7 @@ instance Normalise EqualityView where
   normalise' (OtherType t)            = OtherType
     <$> normalise' t
   normalise' (EqualityType s eq l t a b) = EqualityType
-    <$> normalise' s
+    <$> return ()
     <*> return eq
     <*> mapM normalise' l
     <*> normalise' t
@@ -1185,7 +1185,7 @@ instance InstantiateFull Sort where
 
 instance (InstantiateFull a) => InstantiateFull (Type' a) where
     instantiateFull' (El s t) =
-      El <$> instantiateFull' s <*> instantiateFull' t
+      El () <$> instantiateFull' t
 
 instance InstantiateFull Term where
     instantiateFull' v = etaOnce =<< do -- Andreas, 2010-11-12 DONT ETA!? eta-reduction breaks subject reduction
@@ -1500,7 +1500,7 @@ instance InstantiateFull EqualityView where
   instantiateFull' (OtherType t)            = OtherType
     <$> instantiateFull' t
   instantiateFull' (EqualityType s eq l t a b) = EqualityType
-    <$> instantiateFull' s
+    <$> return ()
     <*> return eq
     <*> mapM instantiateFull' l
     <*> instantiateFull' t

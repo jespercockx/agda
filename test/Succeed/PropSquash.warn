@@ -1,0 +1,7 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+out > PropSquash.agda:8,20-28
+out > Panic: de Bruijn index out of scope: 2 in context []
+out > when checking that the pattern squash x has type Squash A
+out >

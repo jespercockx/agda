@@ -54,13 +54,13 @@ import qualified Agda.Interaction.Options.Lenses as Lens
 import Agda.Utils.Impossible
 
 agdaTermType :: TCM Type
-agdaTermType = El (mkType 0) <$> primAgdaTerm
+agdaTermType = El () <$> primAgdaTerm
 
 agdaTypeType :: TCM Type
 agdaTypeType = agdaTermType
 
 qNameType :: TCM Type
-qNameType = El (mkType 0) <$> primQName
+qNameType = El () <$> primQName
 
 data Dirty = Dirty | Clean
   deriving (Eq)
@@ -529,8 +529,7 @@ evalTCM v = do
       norm <- viewTC eUnquoteNormalise
       if norm then normalise v else instantiateFull v
 
-    mkT l a = El s a
-      where s = Type $ Max 0 [Plus 0 $ UnreducedLevel l]
+    mkT l a = El () a
 
     -- Don't catch Unquote errors!
     tcCatchError :: Term -> Term -> UnquoteM Term
@@ -624,7 +623,7 @@ evalTCM v = do
 
     tcCheckType :: R.Term -> R.Type -> TCM Term
     tcCheckType v a = do
-      a <- isType_ =<< toAbstract_ a
+      (sa , a) <- isType_ =<< toAbstract_ a
       e <- toAbstract_ v
       v <- checkExpr e a
       quoteTerm =<< process v
@@ -656,7 +655,7 @@ evalTCM v = do
     extendCxt :: Arg R.Type -> UnquoteM a -> UnquoteM a
     extendCxt a m = do
       a <- liftTCM $ traverse (isType_ <=< toAbstract_) a
-      liftU1 (addContext (domFromArg a :: Dom Type)) m
+      liftU1 (addContext (domFromArg (snd <$> a) :: Dom Type)) m
 
     tcExtendContext :: Term -> Term -> UnquoteM Term
     tcExtendContext a m = do
@@ -705,7 +704,7 @@ evalTCM v = do
           [ "declare" <+> prettyTCM x <+> ":"
           , nest 2 $ prettyR a
           ]
-        a <- isType_ =<< toAbstract_ a
+        (sa , a) <- isType_ =<< toAbstract_ a
         alreadyDefined <- isRight <$> getConstInfo' x
         when alreadyDefined $ genericError $ "Multiple declarations of " ++ prettyShow x
         addConstant x $ defaultDefn i x a emptyFunction
@@ -727,7 +726,7 @@ evalTCM v = do
           [ "declare Postulate" <+> prettyTCM x <+> ":"
           , nest 2 $ prettyR a
           ]
-        a <- isType_ =<< toAbstract_ a
+        (sa , a) <- isType_ =<< toAbstract_ a
         alreadyDefined <- isRight <$> getConstInfo' x
         when alreadyDefined $ genericError $ "Multiple declarations of " ++ prettyShow x
         addConstant x $ defaultDefn i x a Axiom

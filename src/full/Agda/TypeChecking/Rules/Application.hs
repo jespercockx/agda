@@ -1135,7 +1135,7 @@ checkSharpApplication e t c args = do
     (_, l) <- newValueMeta RunMetaOccursCheck CmpLeq lvl
     lv  <- levelView l
     (_, a) <- newValueMeta RunMetaOccursCheck CmpEq (sort $ Type lv)
-    return $ El (Type lv) $ Def inf [Apply $ setHiding Hidden $ defaultArg l, Apply $ defaultArg a]
+    return $ El () $ Def inf [Apply $ setHiding Hidden $ defaultArg l, Apply $ defaultArg a]
 
   wrapper <- inFreshModuleIfFreeParams $ do
     c' <- setRange (getRange c) <$>
