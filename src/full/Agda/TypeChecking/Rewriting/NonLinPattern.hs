@@ -87,7 +87,7 @@ instance PatternFrom () Sort NLPSort where
       Inf f n  -> return $ PInf f n
       SSet l   -> __IMPOSSIBLE__
       SizeUniv -> return PSizeUniv
-      PiSort _ _ -> __IMPOSSIBLE__
+      PiSort _ _ _ -> __IMPOSSIBLE__
       FunSort _ _ -> __IMPOSSIBLE__
       UnivSort _ -> __IMPOSSIBLE__
       MetaS{}  -> __IMPOSSIBLE__

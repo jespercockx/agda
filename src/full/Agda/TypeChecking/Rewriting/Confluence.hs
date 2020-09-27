@@ -869,7 +869,7 @@ instance MetasToVars Sort where
     Inf f n    -> pure $ Inf f n
     SSet l     -> SSet     <$> metasToVars l
     SizeUniv   -> pure SizeUniv
-    PiSort s t -> PiSort   <$> metasToVars s <*> metasToVars t
+    PiSort s t u -> PiSort   <$> metasToVars s <*> metasToVars t <*> metasToVars u
     FunSort s t -> FunSort <$> metasToVars s <*> metasToVars t
     UnivSort s -> UnivSort <$> metasToVars s
     MetaS x es -> MetaS x  <$> metasToVars es
