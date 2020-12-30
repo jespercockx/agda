@@ -374,7 +374,7 @@ initPostScopeState = PostScopeState
   { stPostSyntaxInfo           = mempty
   , stPostDisambiguatedNames   = IntMap.empty
   , stPostMetaStore            = IntMap.empty
-  , stPostInteractionPoints    = Map.empty
+  , stPostInteractionPoints    = HMap.empty
   , stPostAwakeConstraints     = []
   , stPostSleepingConstraints  = []
   , stPostDirty                = False
@@ -1446,7 +1446,7 @@ instance Eq InteractionPoint where (==) = (==) `on` ipMeta
 --
 --   We never remove interaction points from this map, only set their
 --   'ipSolved' to @True@.  (Issue #2368)
-type InteractionPoints = Map InteractionId InteractionPoint
+type InteractionPoints = HashMap InteractionId InteractionPoint
 
 
 -- | Flag to indicate whether the meta is overapplied in the

@@ -2323,6 +2323,7 @@ newtype InteractionId = InteractionId { interactionId :: Nat }
              , Real
              , Enum
              , Data
+             , Hashable
              )
 
 instance Pretty InteractionId where

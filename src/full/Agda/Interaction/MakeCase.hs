@@ -8,6 +8,7 @@ import Control.Monad
 
 import Data.Either
 import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as HMap
 import qualified Data.List as List
 import Data.Maybe
 import Data.Monoid
@@ -415,7 +416,7 @@ makeCase hole rng s = withInteractionId hole $ locallyTC eMakeCase (const True) 
   -- In this case, we refuse to split, as this might lose the refinements.
   checkClauseIsClean :: IPClause -> TCM ()
   checkClauseIsClean ipCl = do
-    sips <- filter ipSolved . Map.elems <$> useTC stInteractionPoints
+    sips <- filter ipSolved . HMap.elems <$> useTC stInteractionPoints
     when (List.any ((== ipCl) . ipClause) sips) $
       typeError $ GenericError $ "Cannot split as clause rhs has been refined.  Please reload"
 

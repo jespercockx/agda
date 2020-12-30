@@ -44,6 +44,7 @@ import Agda.TypeChecking.Warnings
 import Agda.Benchmarking (Phase(Typing, Generalize))
 import Agda.Utils.Benchmark
 import Agda.Utils.Functor
+import qualified Agda.Utils.HashMap.Strict as HMap
 import Agda.Utils.Impossible
 import Agda.Utils.List   (hasElem)
 import Agda.Utils.Maybe
@@ -305,7 +306,7 @@ computeGeneralization genRecMeta nameMap allmetas = postponeInstanceConstraints 
   let inscope (ii, InteractionPoint{ipMeta = Just x})
         | IntSet.member (metaId x) allmetas = [(x, ii)]
       inscope _ = []
-  ips <- Map.fromList . concatMap inscope . Map.toList <$> useTC stInteractionPoints
+  ips <- Map.fromList . concatMap inscope . HMap.toList <$> useTC stInteractionPoints
   pruneUnsolvedMetas genRecName genRecCon genTel genRecFields ips shouldGeneralize allSortedMetas
 
   -- Fill in the missing details of the telescope record.

@@ -26,6 +26,7 @@ import Agda.Interaction.Options
 import Agda.TypeChecking.Monad.Base
 import Agda.TypeChecking.Monad.Debug
 
+import qualified Agda.Utils.HashMap.Strict as HMap
 import Agda.Utils.Lens
 import Agda.Utils.Monad
 import Agda.Utils.Null (empty)
@@ -72,7 +73,7 @@ restorePostScopeState pss = do
                   }
     in  s{stPostScopeState = pss'}
   where
-    mergeIPMap lm sm = Map.mapWithKey (\k v -> maybe v (`mergeIP` v) (Map.lookup k lm)) sm
+    mergeIPMap lm sm = HMap.mapWithKey (\k v -> maybe v (`mergeIP` v) (HMap.lookup k lm)) sm
     -- see #1338 on why we need to use the new ranges.
     mergeIP li si = li { ipRange = ipRange si }
 

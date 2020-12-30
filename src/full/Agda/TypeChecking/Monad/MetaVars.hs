@@ -39,6 +39,7 @@ import Agda.TypeChecking.Substitute
 import {-# SOURCE #-} Agda.TypeChecking.Telescope
 
 import Agda.Utils.Functor ((<.>))
+import qualified Agda.Utils.HashMap.Strict as HMap
 import Agda.Utils.List (nubOn)
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
@@ -369,7 +370,7 @@ registerInteractionPoint preciseRange r maybeId = do
     Just i  -> return $ InteractionId i
     Nothing -> freshInteractionId
   let ip = InteractionPoint { ipRange = r, ipMeta = Nothing, ipSolved = False, ipClause = IPNoClause }
-  case Map.insertLookupWithKey (\ key new old -> old) ii ip m of
+  case HMap.insertLookupWithKey (\ key new old -> old) ii ip m of
     -- If the interaction point is already present, we keep the old ip.
     -- However, it needs to be at the same range as the new one.
     (Just ip0, _)
@@ -386,7 +387,7 @@ registerInteractionPoint preciseRange r maybeId = do
 findInteractionPoint_ :: Range -> InteractionPoints -> Maybe InteractionId
 findInteractionPoint_ r m = do
   guard $ not $ null r
-  listToMaybe $ mapMaybe sameRange $ Map.toList m
+  listToMaybe $ mapMaybe sameRange $ HMap.toList m
   where
     sameRange :: (InteractionId, InteractionPoint) -> Maybe InteractionId
     sameRange (ii, InteractionPoint r' _ _ _) | r == r' = Just ii
@@ -401,24 +402,24 @@ connectInteractionPoint ii mi = do
   m <- useR stInteractionPoints
   let ip = InteractionPoint { ipRange = __IMPOSSIBLE__, ipMeta = Just mi, ipSolved = False, ipClause = ipCl }
   -- The interaction point needs to be present already, we just set the meta.
-  case Map.insertLookupWithKey (\ key new old -> new { ipRange = ipRange old }) ii ip m of
+  case HMap.insertLookupWithKey (\ key new old -> new { ipRange = ipRange old }) ii ip m of
     (Nothing, _) -> __IMPOSSIBLE__
     (Just _, m') -> modifyInteractionPoints $ const m'
 
 -- | Mark an interaction point as solved.
 removeInteractionPoint :: MonadInteractionPoints m => InteractionId -> m ()
 removeInteractionPoint ii =
-  modifyInteractionPoints $ Map.update (\ ip -> Just ip{ ipSolved = True }) ii
+  modifyInteractionPoints $ HMap.update (\ ip -> Just ip{ ipSolved = True }) ii
 
 -- | Get a list of interaction ids.
 {-# SPECIALIZE getInteractionPoints :: TCM [InteractionId] #-}
 getInteractionPoints :: ReadTCState m => m [InteractionId]
-getInteractionPoints = Map.keys <$> useR stInteractionPoints
+getInteractionPoints = HMap.keys <$> useR stInteractionPoints
 
 -- | Get all metas that correspond to unsolved interaction ids.
 getInteractionMetas :: ReadTCState m => m [MetaId]
 getInteractionMetas =
-  mapMaybe ipMeta . filter (not . ipSolved) . Map.elems <$> useR stInteractionPoints
+  mapMaybe ipMeta . filter (not . ipSolved) . HMap.elems <$> useR stInteractionPoints
 
 getUniqueMetasRanges :: (MonadFail m, ReadTCState m) => [MetaId] -> m [Range]
 getUniqueMetasRanges = fmap (nubOn id) . mapM getMetaRange
@@ -435,7 +436,7 @@ getUnsolvedInteractionMetas = getUniqueMetasRanges =<< getInteractionMetas
 -- | Get all metas that correspond to unsolved interaction ids.
 getInteractionIdsAndMetas :: ReadTCState m => m [(InteractionId,MetaId)]
 getInteractionIdsAndMetas =
-  mapMaybe f . filter (not . ipSolved . snd) . Map.toList <$> useR stInteractionPoints
+  mapMaybe f . filter (not . ipSolved . snd) . HMap.toList <$> useR stInteractionPoints
   where f (ii, ip) = (ii,) <$> ipMeta ip
 
 -- | Does the meta variable correspond to an interaction point?
@@ -450,7 +451,7 @@ lookupInteractionPoint
   :: (MonadFail m, ReadTCState m, MonadError TCErr m)
   => InteractionId -> m InteractionPoint
 lookupInteractionPoint ii =
-  fromMaybeM err $ Map.lookup ii <$> useR stInteractionPoints
+  fromMaybeM err $ HMap.lookup ii <$> useR stInteractionPoints
   where
     err  = fail $ "no such interaction point: " ++ show ii
 
@@ -468,7 +469,7 @@ lookupInteractionMeta :: ReadTCState m => InteractionId -> m (Maybe MetaId)
 lookupInteractionMeta ii = lookupInteractionMeta_ ii <$> useR stInteractionPoints
 
 lookupInteractionMeta_ :: InteractionId -> InteractionPoints -> Maybe MetaId
-lookupInteractionMeta_ ii m = ipMeta =<< Map.lookup ii m
+lookupInteractionMeta_ ii m = ipMeta =<< HMap.lookup ii m
 
 -- | Generate new meta variable.
 newMeta :: MonadMetaSolver m => Frozen -> MetaInfo -> MetaPriority -> Permutation -> Judgement a -> m MetaId
