@@ -18,6 +18,8 @@ module Agda.TypeChecking.Monad.Caching
 
 
 import qualified Data.Map as Map
+import Data.Strict.Tuple (Pair(..))
+import qualified Data.Strict.Tuple as Strict
 
 import Agda.Syntax.Common
 
@@ -28,6 +30,8 @@ import Agda.TypeChecking.Monad.Debug
 
 import qualified Agda.Utils.HashMap.Strict as HMap
 import Agda.Utils.Lens
+import Agda.Utils.List.Strict (List(..))
+import qualified Agda.Utils.List.Strict as Strict
 import Agda.Utils.Monad
 import Agda.Utils.Null (empty)
 
@@ -59,7 +63,7 @@ writeToCurrentLog :: (MonadDebug m, MonadTCState m, ReadTCState m) => TypeCheckA
 writeToCurrentLog !d = do
   reportSLn "cache" 10 $ "cachePostScopeState"
   !l <- getsTC stPostScopeState
-  modifyCache $ fmap $ \lfc -> lfc{ lfcCurrent = (d, l) : lfcCurrent lfc}
+  modifyCache $ fmap $ \lfc -> lfc{ lfcCurrent = (d :!: l) :! lfcCurrent lfc}
 
 {-# SPECIALIZE restorePostScopeState :: PostScopeState -> TCM () #-}
 restorePostScopeState :: (MonadDebug m, MonadTCState m) => PostScopeState -> m ()
@@ -114,9 +118,9 @@ readFromCachedLog :: (MonadDebug m, MonadTCState m, ReadTCState m) => m (Maybe (
 readFromCachedLog = do
   reportSLn "cache" 10 $ "getCachedTypeCheckAction"
   getCache >>= \case
-    Just lfc | (entry : entries) <- lfcCached lfc -> do
+    Just lfc | (entry@(act :!: s) :! entries) <- lfcCached lfc -> do
       putCache $ Just lfc{lfcCached = entries}
-      return (Just entry)
+      return (Just (act,s))
     _ -> do
       return Nothing
 
@@ -125,7 +129,7 @@ readFromCachedLog = do
 cleanCachedLog :: (MonadDebug m, MonadTCState m) => m ()
 cleanCachedLog = do
   reportSLn "cache" 10 $ "cleanCachedLog"
-  modifyCache $ fmap $ \lfc -> lfc{lfcCached = []}
+  modifyCache $ fmap $ \lfc -> lfc{lfcCached = Empty}
 
 -- | Makes sure that the 'stLoadedFileCache' is 'Just', with a clean
 -- current log. Crashes is 'stLoadedFileCache' is already active with a
@@ -139,7 +143,7 @@ activateLoadedFileCache = do
   whenM (optGHCiInteraction <$> commandLineOptions) $
     whenM enableCaching $ do
       modifyCache $ \case
-         Nothing                          -> Just $ LoadedFileCache [] []
+         Nothing                          -> Just $ LoadedFileCache Empty Empty
          Just lfc | null (lfcCurrent lfc) -> Just lfc
          _                                -> __IMPOSSIBLE__
 
@@ -150,4 +154,4 @@ cacheCurrentLog :: (MonadDebug m, MonadTCState m) => m ()
 cacheCurrentLog = do
   reportSLn "cache" 10 $ "cacheCurrentTypeCheckLog"
   modifyCache $ fmap $ \lfc ->
-    lfc{lfcCached = reverse (lfcCurrent lfc), lfcCurrent = []}
+    lfc{lfcCached = Strict.reverse (lfcCurrent lfc), lfcCurrent = Empty}

@@ -587,6 +587,7 @@ library
                     Agda.Utils.List1
                     Agda.Utils.List2
                     Agda.Utils.ListT
+                    Agda.Utils.List.Strict
                     Agda.Utils.Map
                     Agda.Utils.Maybe
                     Agda.Utils.Maybe.Strict

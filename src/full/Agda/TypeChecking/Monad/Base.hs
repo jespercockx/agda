@@ -34,6 +34,8 @@ import qualified Data.Map as Map -- hiding (singleton, null, empty)
 import Data.Sequence (Seq)
 import Data.Set (Set)
 import qualified Data.Set as Set -- hiding (singleton, null, empty)
+import Data.Strict.Tuple (Pair(..))
+import qualified Data.Strict.Tuple as Strict
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.Semigroup ( Semigroup, (<>)) --, Any(..) )
@@ -95,6 +97,7 @@ import Agda.Utils.ListT
 import Agda.Utils.List1 (List1, pattern (:|))
 import Agda.Utils.List2 (List2, pattern List2)
 import qualified Agda.Utils.List1 as List1
+import qualified Agda.Utils.List.Strict as Strict
 import qualified Agda.Utils.Maybe.Strict as Strict
 import Agda.Utils.Monad
 import Agda.Utils.Null
@@ -305,12 +308,12 @@ data LoadedFileCache = LoadedFileCache
 
 -- | A log of what the type checker does and states after the action is
 -- completed.  The cached version is stored first executed action first.
-type CachedTypeCheckLog = [(TypeCheckAction, PostScopeState)]
+type CachedTypeCheckLog = Strict.List (Strict.Pair TypeCheckAction PostScopeState)
 
 -- | Like 'CachedTypeCheckLog', but storing the log for an ongoing type
 -- checking of a module.  Stored in reverse order (last performed action
 -- first).
-type CurrentTypeCheckLog = [(TypeCheckAction, PostScopeState)]
+type CurrentTypeCheckLog = Strict.List (Strict.Pair TypeCheckAction PostScopeState)
 
 -- | A complete log for a module will look like this:
 --
