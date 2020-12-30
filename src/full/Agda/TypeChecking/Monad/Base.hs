@@ -4104,8 +4104,10 @@ instance MonadIO m => MonadTCEnv (TCMT m) where
 
 instance MonadIO m => MonadTCState (TCMT m) where
   getTC   = TCM $ \ r _e -> liftIO (readIORef r)
-  putTC s = TCM $ \ r _e -> liftIO (writeIORef r s)
-  modifyTC f = putTC . f =<< getTC
+  putTC s = s `seq` TCM $ \ r _e -> liftIO (writeIORef r s)
+  modifyTC f = do
+    s' <- getTC
+    putTC $! f s'
 
 instance MonadIO m => ReadTCState (TCMT m) where
   getTCState = getTC
