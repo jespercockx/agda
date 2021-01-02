@@ -38,8 +38,8 @@ import Agda.Utils.Null (empty)
 import Agda.Utils.Impossible
 
 -- | To be called before any write or restore calls.
-{-# SPECIALIZE cachingStarts :: TCM () #-}
-cachingStarts :: (MonadDebug m, MonadTCState m, ReadTCState m) => m ()
+{-# INLINE cachingStarts #-}
+cachingStarts :: TCM ()
 cachingStarts = do
     NameId _ m <- useTC stFreshNameId
     stFreshNameId `setTCLens` NameId 1 m
@@ -53,20 +53,21 @@ cachingStarts = do
         _ -> do
           return ()
 
-areWeCaching :: (ReadTCState m) => m Bool
+{-# INLINE  areWeCaching #-}
+areWeCaching :: TCM Bool
 areWeCaching = useR stAreWeCaching
 
 -- | Writes a 'TypeCheckAction' to the current log, using the current
 -- 'PostScopeState'
-{-# SPECIALIZE writeToCurrentLog :: TypeCheckAction -> TCM () #-}
-writeToCurrentLog :: (MonadDebug m, MonadTCState m, ReadTCState m) => TypeCheckAction -> m ()
+{-# INLINE writeToCurrentLog #-}
+writeToCurrentLog :: TypeCheckAction -> TCM ()
 writeToCurrentLog !d = do
   reportSLn "cache" 10 $ "cachePostScopeState"
   !l <- getsTC stPostScopeState
   modifyCache $ fmap $ \lfc -> lfc{ lfcCurrent = (d :!: l) :! lfcCurrent lfc}
 
-{-# SPECIALIZE restorePostScopeState :: PostScopeState -> TCM () #-}
-restorePostScopeState :: (MonadDebug m, MonadTCState m) => PostScopeState -> m ()
+{-# INLINE restorePostScopeState #-}
+restorePostScopeState :: PostScopeState -> TCM ()
 restorePostScopeState pss = do
   reportSLn "cache" 10 $ "restorePostScopeState"
   modifyTC $ \s ->
@@ -84,37 +85,36 @@ restorePostScopeState pss = do
     mergeWarnings loading current = [ w | w <- current, not $ tcWarningCached w ]
                                  ++ [ w | w <- loading,       tcWarningCached w ]
 
-{-# SPECIALIZE modifyCache :: (Maybe LoadedFileCache -> Maybe LoadedFileCache) -> TCM () #-}
+{-# INLINE modifyCache #-}
 modifyCache
-  :: MonadTCState m
-  => (Maybe LoadedFileCache -> Maybe LoadedFileCache)
-  -> m ()
+  :: (Maybe LoadedFileCache -> Maybe LoadedFileCache)
+  -> TCM ()
 modifyCache = modifyTCLens stLoadedFileCache
 
-{-# SPECIALIZE getCache :: TCM (Maybe LoadedFileCache) #-}
-getCache :: ReadTCState m => m (Maybe LoadedFileCache)
+{-# INLINE getCache #-}
+getCache :: TCM (Maybe LoadedFileCache)
 getCache = useTC stLoadedFileCache
 
-{-# SPECIALIZE putCache :: Maybe LoadedFileCache -> TCM () #-}
-putCache :: MonadTCState m => Maybe LoadedFileCache -> m ()
+{-# INLINE putCache #-}
+putCache :: Maybe LoadedFileCache -> TCM ()
 putCache = setTCLens stLoadedFileCache
 
 -- | Runs the action and restores the current cache at the end of it.
-{-# SPECIALIZE localCache :: TCM a -> TCM a #-}
-localCache :: (MonadTCState m, ReadTCState m) => m a -> m a
+{-# INLINE localCache #-}
+localCache :: TCM a -> TCM a
 localCache = bracket_ getCache putCache
 
 -- | Runs the action without cache and restores the current cache at
 -- the end of it.
-{-# SPECIALIZE withoutCache :: TCM a -> TCM a #-}
-withoutCache :: (MonadTCState m, ReadTCState m) => m a -> m a
+{-# INLINE withoutCache #-}
+withoutCache :: TCM a -> TCM a
 withoutCache m = localCache $ do
     putCache empty
     m
 
 -- | Reads the next entry in the cached type check log, if present.
-{-# SPECIALIZE readFromCachedLog :: TCM (Maybe (TypeCheckAction, PostScopeState)) #-}
-readFromCachedLog :: (MonadDebug m, MonadTCState m, ReadTCState m) => m (Maybe (TypeCheckAction, PostScopeState))
+{-# INLINE readFromCachedLog #-}
+readFromCachedLog :: TCM (Maybe (TypeCheckAction, PostScopeState))
 readFromCachedLog = do
   reportSLn "cache" 10 $ "getCachedTypeCheckAction"
   getCache >>= \case
@@ -125,8 +125,8 @@ readFromCachedLog = do
       return Nothing
 
 -- | Empties the "to read" CachedState. To be used when it gets invalid.
-{-# SPECIALIZE cleanCachedLog :: TCM () #-}
-cleanCachedLog :: (MonadDebug m, MonadTCState m) => m ()
+{-# INLINE cleanCachedLog #-}
+cleanCachedLog :: TCM ()
 cleanCachedLog = do
   reportSLn "cache" 10 $ "cleanCachedLog"
   modifyCache $ fmap $ \lfc -> lfc{lfcCached = Empty}
@@ -135,8 +135,8 @@ cleanCachedLog = do
 -- current log. Crashes is 'stLoadedFileCache' is already active with a
 -- dirty log.  Should be called when we start typechecking the current
 -- file.
-{-# SPECIALIZE activateLoadedFileCache :: TCM () #-}
-activateLoadedFileCache :: (HasOptions m, MonadDebug m, MonadTCState m) => m ()
+{-# INLINE activateLoadedFileCache #-}
+activateLoadedFileCache :: TCM ()
 activateLoadedFileCache = do
   reportSLn "cache" 10 $ "activateLoadedFileCache"
 
@@ -149,8 +149,8 @@ activateLoadedFileCache = do
 
 -- | Caches the current type check log.  Discardes the old cache.  Does
 -- nothing if caching is inactive.
-{-# SPECIALIZE cacheCurrentLog :: TCM () #-}
-cacheCurrentLog :: (MonadDebug m, MonadTCState m) => m ()
+{-# INLINE cacheCurrentLog #-}
+cacheCurrentLog :: TCM ()
 cacheCurrentLog = do
   reportSLn "cache" 10 $ "cacheCurrentTypeCheckLog"
   modifyCache $ fmap $ \lfc ->

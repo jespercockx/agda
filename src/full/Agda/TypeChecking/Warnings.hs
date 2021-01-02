@@ -94,7 +94,7 @@ warning'_ :: (MonadWarning m) => CallStack -> Warning -> m TCWarning
 warning'_ loc w = do
   r <- viewTC eRange
   c <- viewTC eCall
-  b <- areWeCaching
+  b <- useR stAreWeCaching
   -- NicifierIssues print their own error locations in their list of
   -- issues (but we might need to keep the overall range `r` for
   -- comparing ranges)
