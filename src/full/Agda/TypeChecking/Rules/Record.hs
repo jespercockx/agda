@@ -248,6 +248,9 @@ checkRecDef i name uc (RecordDirectives ind eta0 pat con) (A.DataDefParams gpars
         NotInstanceDef -> pure ()
 
       -- Check that the fields fit inside the sort
+      when (uc == NoUniverseCheck) $
+        tellUnsafePragma name UnsafeNoUniverseCheckPragma
+
       _ <- fitsIn uc [] contype s
 
       {- Andreas, 2011-04-27 WRONG because field types are checked again

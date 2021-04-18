@@ -1573,6 +1573,9 @@ openMetasToPostulates = do
           ]
         ]
 
+      -- Record that we did something unsafe
+      tellPostulate q
+
       -- Add the new postulate to the signature.
       addConstant q $ defaultDefn defaultArgInfo q t defaultAxiom
 

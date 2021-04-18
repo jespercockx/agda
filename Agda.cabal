@@ -370,6 +370,7 @@ library
                     Agda.Interaction.Options.Help
                     Agda.Interaction.Options.Lenses
                     Agda.Interaction.Options.Warnings
+                    Agda.Interaction.UnsafeThings
                     Agda.Main
                     Agda.Syntax.Abstract.Name
                     Agda.Syntax.Abstract.Pattern
@@ -500,6 +501,7 @@ library
                     Agda.TypeChecking.Monad.State
                     Agda.TypeChecking.Monad.Statistics
                     Agda.TypeChecking.Monad.Trace
+                    Agda.TypeChecking.Monad.Unsafe
                     Agda.TypeChecking.Monad
                     Agda.TypeChecking.Names
                     Agda.TypeChecking.Patterns.Abstract

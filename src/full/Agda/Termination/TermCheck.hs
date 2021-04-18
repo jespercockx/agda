@@ -169,12 +169,16 @@ termMutual names0 = ifNotM (optTerminationCheck <$> pragmaOptions) (return mempt
   -- NO_TERMINATION_CHECK
   if (Info.mutualTerminationCheck i `elem` [ NoTerminationCheck, Terminating ]) then do
       reportSLn "term.warn.yes" 10 $ "Skipping termination check for " ++ prettyShow names
-      forM_ allNames $ \ q -> setTerminates q True -- considered terminating!
+      forM_ allNames $ \ q -> do
+        tellUnsafePragma q UnsafeTerminatingPragma
+        setTerminates q True -- considered terminating!
       return mempty
   -- NON_TERMINATING
   else if (Info.mutualTerminationCheck i == NonTerminating) then do
       reportSLn "term.warn.yes" 10 $ "Considering as non-terminating: " ++ prettyShow names
-      forM_ allNames $ \ q -> setTerminates q False
+      forM_ allNames $ \ q -> do
+        tellUnsafePragma q UnsafeTerminatingPragma
+        setTerminates q False
       return mempty
   else do
     sccs <- do

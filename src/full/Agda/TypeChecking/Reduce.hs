@@ -1520,7 +1520,7 @@ instance InstantiateFull Interface where
     instantiateFull' (Interface h s ft ms mod scope inside
                                sig display userwarn importwarn b foreignCode
                                highlighting libPragmas filePragmas usedOpts patsyns
-                               warnings partialdefs) =
+                               warnings partialdefs unsafethings) =
         Interface h s ft ms mod scope inside
             <$> instantiateFull' sig
             <*> instantiateFull' display
@@ -1535,6 +1535,7 @@ instance InstantiateFull Interface where
             <*> return patsyns
             <*> return warnings
             <*> return partialdefs
+            <*> return unsafethings
 
 instance InstantiateFull a => InstantiateFull (Builtin a) where
     instantiateFull' (Builtin t) = Builtin <$> instantiateFull' t

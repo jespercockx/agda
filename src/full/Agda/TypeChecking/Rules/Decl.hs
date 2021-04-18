@@ -143,7 +143,9 @@ checkDecl d = setCurrentRange d $ do
                         -- We're definitely inside a mutual block.
 
     (finalChecks, metas) <- metasCreatedBy $ case d of
-      A.Axiom{}                -> meta $ checkTypeSignature d
+      A.Axiom _ _ _ _ x _      -> meta $ do
+                                    tellPostulate x
+                                    checkTypeSignature d
       A.Generalize s i info x e -> meta $ inConcreteMode $ checkGeneralize s i info x e
       A.Field{}                -> typeError FieldOutsideRecord
       A.Primitive i x e        -> meta $ checkPrimitive i x e
@@ -627,6 +629,7 @@ checkAxiom' gentel kind i info0 mp x e = whenAbstractFreezeMetasAfter i $ defaul
       reportSLn "tc.polarity.pragma" 10 $
         "Setting occurrences and polarity for " ++ prettyShow x ++ ":\n  " ++
         prettyShow occs ++ "\n  " ++ prettyShow pols
+      tellUnsafePragma x UnsafePolarityPragma
       return (occs, pols)
 
 
@@ -731,13 +734,16 @@ checkPragma r p =
           unlessM ((x' `isInModule`) <$> currentModule) $
             typeError $ GenericError $
               "COMPILE pragmas must appear in the same module as their corresponding definitions,"
+          tellUnsafePragma x UnsafeCompilePragma
           addPragma (rangedThing b) x s
         A.StaticPragma x -> do
           def <- getConstInfo x
           case theDef def of
             Function{} -> markStatic x
             _          -> typeError $ GenericError "STATIC directive only works on functions"
-        A.InjectivePragma x -> markInjective x
+        A.InjectivePragma x -> do
+          tellUnsafePragma x UnsafeInjectivePragma
+          markInjective x
         A.InlinePragma b x -> do
           def <- getConstInfo x
           case theDef def of
@@ -756,6 +762,7 @@ checkPragma r p =
                      "ETA pragma conflicts with no-eta-equality declaration"
                  | otherwise -> return ()
             _ -> __IMPOSSIBLE__
+          tellUnsafePragma r UnsafeEtaPragma
           modifySignature $ updateDefinition r $ updateTheDef $ \case
             def@Record{} -> def { recEtaEquality' = Specified YesEta }
             _ -> __IMPOSSIBLE__

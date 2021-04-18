@@ -898,6 +898,7 @@ evalTCM v = do
       when (hidden i) $ liftTCM $ typeError . GenericDocError =<<
         "Cannot declare hidden function" <+> prettyTCM x
       tell [x]
+      tellPostulate x
       liftTCM $ do
         reportSDoc "tc.unquote.decl" 10 $ sep
           [ "declare Postulate" <+> prettyTCM x <+> ":"

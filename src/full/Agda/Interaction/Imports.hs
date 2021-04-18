@@ -203,6 +203,7 @@ mergeInterface i = do
         prim    = [ x | (_,Prim x) <- builtin ]
         bi      = Map.fromList [ (x,Builtin t) | (x,Builtin t) <- builtin ]
         warns   = iWarnings i
+        unsafes = iUnsafeThings i
     bs <- getsTC stBuiltinThings
     reportSLn "import.iface.merge" 10 "Merging interface"
     reportSLn "import.iface.merge" 20 $
@@ -223,6 +224,7 @@ mergeInterface i = do
       (iUserWarnings i)
       (iPartialDefs i)
       warns
+      unsafes
     reportSLn "import.iface.merge" 20 $
       "  Rebinding primitives " ++ show prim
     mapM_ rebind prim
@@ -242,8 +244,9 @@ addImportedThings
   -> Map A.QName Text      -- ^ Imported user warnings
   -> Set QName             -- ^ Name of imported definitions which are partial
   -> [TCWarning]
+  -> UnsafeThings
   -> TCM ()
-addImportedThings isig ibuiltin patsyns display userwarn partialdefs warnings = do
+addImportedThings isig ibuiltin patsyns display userwarn partialdefs warnings unsafes = do
   stImports              `modifyTCLens` \ imp -> unionSignatures [imp, isig]
   stImportedBuiltins     `modifyTCLens` \ imp -> Map.union imp ibuiltin
   stImportedUserWarnings `modifyTCLens` \ imp -> Map.union imp userwarn
@@ -251,6 +254,7 @@ addImportedThings isig ibuiltin patsyns display userwarn partialdefs warnings = 
   stPatternSynImports    `modifyTCLens` \ imp -> Map.union imp patsyns
   stImportedDisplayForms `modifyTCLens` \ imp -> HMap.unionWith (++) imp display
   stTCWarnings           `modifyTCLens` \ imp -> imp `List.union` warnings
+  stUnsafeThings         `modifyTCLens` \ imp -> imp <> unsafes
   addImportedInstances isig
 
 -- | Scope checks the given module. A proper version of the module
@@ -739,6 +743,7 @@ createInterfaceIsolated x file msrc = do
       display     <- useTC stImportsDisplayForms
       userwarn    <- useTC stImportedUserWarnings
       partialdefs <- useTC stImportedPartialDefs
+      unsafes     <- useTC stUnsafeThings
       ipatsyns <- getPatternSynImports
       ho       <- getInteractionOutputCallback
       -- Every interface is treated in isolation. Note: Some changes to
@@ -764,7 +769,7 @@ createInterfaceIsolated x file msrc = do
                setInteractionOutputCallback ho
                stModuleToSource `setTCLens` mf
                setVisitedModules vs
-               addImportedThings isig ibuiltin ipatsyns display userwarn partialdefs []
+               addImportedThings isig ibuiltin ipatsyns display userwarn partialdefs [] unsafes
 
                r  <- createInterface x file NotMainInterface msrc
                mf' <- useTC stModuleToSource
@@ -1044,6 +1049,7 @@ createInterface mname file isMain msrc = do
     unless (null openMetas) $ do
       reportSLn "import.metas" 10 "We have unsolved metas."
       reportSLn "import.metas" 10 =<< showGoals =<< getGoals
+      tellUnsolvedMetas mname $ Set.fromList openMetas
 
     ifTopLevelAndHighlightingLevelIs NonInteractive printUnsolvedInfo
 
@@ -1188,6 +1194,7 @@ buildInterface src topLevel = do
     syntaxInfo     <- useTC stSyntaxInfo
     optionsUsed    <- useTC stPragmaOptions
     partialDefs    <- useTC stLocalPartialDefs
+    unsafeThings   <- useTC stUnsafeThings
 
     -- Andreas, 2015-02-09 kill ranges in pattern synonyms before
     -- serialization to avoid error locations pointing to external files
@@ -1217,6 +1224,7 @@ buildInterface src topLevel = do
       , iPatternSyns     = patsyns
       , iWarnings        = warnings
       , iPartialDefs     = partialDefs
+      , iUnsafeThings    = unsafeThings
       }
     reportSLn "import.iface" 7 "  interface complete"
     return i

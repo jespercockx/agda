@@ -17,6 +17,7 @@ module Agda.TypeChecking.Monad
     , module Agda.TypeChecking.Monad.State
     , module Agda.TypeChecking.Monad.Statistics
     , module Agda.TypeChecking.Monad.Trace
+    , module Agda.TypeChecking.Monad.Unsafe
     , module Agda.TypeChecking.Monad.Caching
     ) where
 
@@ -38,4 +39,5 @@ import Agda.TypeChecking.Monad.SizedTypes
 import Agda.TypeChecking.Monad.State
 import Agda.TypeChecking.Monad.Statistics
 import Agda.TypeChecking.Monad.Trace
+import Agda.TypeChecking.Monad.Unsafe
 import Agda.TypeChecking.Monad.Caching

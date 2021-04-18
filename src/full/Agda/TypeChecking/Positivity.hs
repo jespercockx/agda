@@ -149,12 +149,14 @@ checkStrictlyPositive mi qset = do
         -- ASR (23 December 2015). We don't raise a strictly positive
         -- error if the NO_POSITIVITY_CHECK pragma was set on in the
         -- mutual block. See Issue 1614.
-        when (Info.mutualPositivityCheck mi == YesPositivityCheck) $
+        if (Info.mutualPositivityCheck mi == YesPositivityCheck) then
           whenM positivityCheckEnabled $
             case loop of
             Just o | o <= JustPos ->
               warning $ NotStrictlyPositive q (reason JustPos)
             _ -> return ()
+        else
+          tellUnsafePragma q UnsafeNoPositivityCheckPragma
 
         -- if we find an unguarded record, mark it as such
         case dr of
@@ -183,7 +185,7 @@ checkStrictlyPositive mi qset = do
       -- ASR (01 January 2016). We don't raise this error if the
       -- NO_POSITIVITY_CHECK pragma was set on in the record. See
       -- Issue 1760.
-      when (Info.mutualPositivityCheck mi == YesPositivityCheck) $
+      if (Info.mutualPositivityCheck mi == YesPositivityCheck) then
         whenM positivityCheckEnabled $ do
         -- Check whether the recursive record has been declared as
         -- 'Inductive' or 'Coinductive'.  Otherwise, error.
@@ -192,6 +194,8 @@ checkStrictlyPositive mi qset = do
             typeError . GenericDocError =<<
               "Recursive record" <+> prettyTCM q <+>
               "needs to be declared as either inductive or coinductive"
+      else
+        tellUnsafePragma q UnsafeNoPositivityCheckPragma
 
     occ (Edge o _) = o
 

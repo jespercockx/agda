@@ -114,6 +114,10 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
                   else throwError err
               reduce s
 
+
+            when (uc == NoUniverseCheck) $
+              tellUnsafePragma name UnsafeNoUniverseCheckPragma
+
             -- when `--without-K`, all the indices should fit in the
             -- sort of the datatype (see #3420).
             let s' = case s of

@@ -12,10 +12,13 @@ import Data.Maybe
 import System.Directory
 import System.FilePath
 
+import Agda.Syntax.Abstract.Name
 import Agda.TypeChecking.Monad.Debug (reportSDoc)
 import Agda.TypeChecking.Warnings
 import Agda.TypeChecking.Monad.Base
+import Agda.TypeChecking.Monad.Env
 import Agda.TypeChecking.Monad.State
+import Agda.TypeChecking.Monad.Unsafe
 import Agda.TypeChecking.Monad.Benchmark
 import Agda.Interaction.Options
 import qualified Agda.Interaction.Options.Lenses as Lens
@@ -35,7 +38,10 @@ setPragmaOptions opts = do
   stPragmaOptions `modifyTCLens` Lens.mapSafeMode (Lens.getSafeMode opts ||)
   clo <- commandLineOptions
   let unsafe = unsafePragmaOptions clo opts
-  when (Lens.getSafeMode opts && not (null unsafe)) $ warning $ SafeFlagPragma unsafe
+  when (not (null unsafe)) $ do
+    m <- toTopLevelModuleName <$> currentModule
+    tellUnsafeFlags m unsafe
+    when (Lens.getSafeMode opts) $ warning $ SafeFlagPragma unsafe
   runOptM (checkOpts clo{ optPragmaOptions = opts }) >>= \case
     Left err   -> __IMPOSSIBLE__
     Right opts -> do

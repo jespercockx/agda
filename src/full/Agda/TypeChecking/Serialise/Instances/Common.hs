@@ -40,6 +40,7 @@ import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Position as P
 import Agda.Syntax.Literal
 import Agda.Interaction.FindFile
+import Agda.Interaction.UnsafeThings
 
 import Agda.TypeChecking.Serialise.Base
 
@@ -684,3 +685,9 @@ instance EmbPrj ExpandedEllipsis where
     valu []      = valuN NoEllipsis
     valu [1,a,b] = valuN ExpandedEllipsis a b
     valu _       = malformed
+
+instance EmbPrj UnsafePragma where
+
+instance EmbPrj UnsafeThings where
+  icod_ (UnsafeThings a b c d e) = icodeN' UnsafeThings a b c d e
+  value = valueN UnsafeThings

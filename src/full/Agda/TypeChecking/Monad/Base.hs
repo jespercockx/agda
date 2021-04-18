@@ -87,6 +87,7 @@ import {-# SOURCE #-} Agda.Interaction.Response
 import Agda.Interaction.Highlighting.Precise
   (HighlightingInfo, NameKind)
 import Agda.Interaction.Library
+import Agda.Interaction.UnsafeThings
 
 import Agda.Utils.Benchmark (MonadBench(..))
 import Agda.Utils.CallStack ( CallStack, HasCallStack, withCallerCallStack )
@@ -179,6 +180,8 @@ data PreScopeState = PreScopeState
   , stPrePragmaOptions      :: !PragmaOptions
     -- ^ Options applying to the current file. @OPTIONS@
     -- pragmas only affect this field.
+  , stPreUnsafeThings       :: !UnsafeThings
+    -- ^ Unsafe things (options, pragmas, postulates, ...).
   , stPreImportedBuiltins   :: !(BuiltinThings PrimFun)
   , stPreImportedDisplayForms :: !DisplayForms
     -- ^ Display forms added by someone else to imported identifiers
@@ -368,6 +371,7 @@ initPreScopeState = PreScopeState
   , stPrePatternSynImports    = Map.empty
   , stPreGeneralizedVars      = mempty
   , stPrePragmaOptions        = defaultInteractionOptions
+  , stPreUnsafeThings         = empty
   , stPreImportedBuiltins     = Map.empty
   , stPreImportedDisplayForms = HMap.empty
   , stPreImportedInstanceDefs = Map.empty
@@ -475,6 +479,26 @@ stPragmaOptions :: Lens' PragmaOptions TCState
 stPragmaOptions f s =
   f (stPrePragmaOptions (stPreScopeState s)) <&>
   \x -> s {stPreScopeState = (stPreScopeState s) {stPrePragmaOptions = x}}
+
+stUnsafeThings :: Lens' UnsafeThings TCState
+stUnsafeThings f s =
+  f (stPreUnsafeThings (stPreScopeState s)) <&>
+  \x -> s {stPreScopeState = (stPreScopeState s) {stPreUnsafeThings = x}}
+
+stUnsafePostulates :: Lens' (Set QName) TCState
+stUnsafePostulates = stUnsafeThings . unsafePostulates
+
+stUnsafeUnsolvedMetas :: Lens' (Map C.TopLevelModuleName (Set MetaId)) TCState
+stUnsafeUnsolvedMetas = stUnsafeThings . unsafeUnsolvedMetas
+
+stUnsafePragmas :: Lens' (Map QName [UnsafePragma]) TCState
+stUnsafePragmas = stUnsafeThings . unsafePragmas
+
+stUnsafeErasedEquality :: Lens' (Set ModuleName) TCState
+stUnsafeErasedEquality = stUnsafeThings . unsafeErasedEquality
+
+stUnsafeFlags :: Lens' (Map C.TopLevelModuleName [String]) TCState
+stUnsafeFlags = stUnsafeThings . unsafeFlags
 
 stImportedBuiltins :: Lens' (BuiltinThings PrimFun) TCState
 stImportedBuiltins f s =
@@ -962,6 +986,7 @@ data Interface = Interface
   , iPatternSyns     :: A.PatternSynDefns
   , iWarnings        :: [TCWarning]
   , iPartialDefs     :: Set QName
+  , iUnsafeThings    :: UnsafeThings
   }
   deriving (Show, Generic)
 
@@ -970,7 +995,7 @@ instance Pretty Interface where
             sourceH source fileT importedM moduleN scope insideS signature
             display userwarn importwarn builtin foreignCode highlighting
             libPragmaO filePragmaO
-            oUsed patternS warnings partialdefs) =
+            oUsed patternS warnings partialdefs unsafethings) =
 
     hang "Interface" 2 $ vcat
       [ "source hash:"         <+> (pretty . show) sourceH
@@ -993,6 +1018,7 @@ instance Pretty Interface where
       , "pattern syns:"        <+> (pretty . show) patternS
       , "warnings:"            <+> (pretty . show) warnings
       , "partial definitions:" <+> (pretty . show) partialdefs
+      , "unsafe things:"       <+> (pretty . show) unsafethings
       ]
 
 -- | Combines the source hash and the (full) hashes of the imported modules.
