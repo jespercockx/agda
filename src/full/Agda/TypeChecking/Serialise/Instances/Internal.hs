@@ -26,7 +26,7 @@ instance EmbPrj a => EmbPrj (Dom a) where
   value = valueN Dom
 
 instance EmbPrj Signature where
-  icod_ (Sig a b c) = icodeN' Sig a b c
+  icod_ (Sig a b c d) = icodeN' Sig a b c d
 
   value = valueN Sig
 
@@ -276,6 +276,11 @@ instance EmbPrj RewriteRule where
   icod_ (RewriteRule a b c d e f g) = icodeN' RewriteRule a b c d e f g
 
   value = valueN RewriteRule
+
+instance EmbPrj ExpandRule where
+  icod_ (ExpandRule a b c d e) = icodeN' ExpandRule a b c d e
+
+  value = valueN ExpandRule
 
 instance EmbPrj Projection where
   icod_ (Projection a b c d e) = icodeN' Projection a b c d e

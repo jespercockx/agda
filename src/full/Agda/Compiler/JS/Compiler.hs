@@ -39,7 +39,7 @@ import Agda.Syntax.Literal       ( Literal(..) )
 import Agda.Syntax.Treeless      ( ArgUsage(..), filterUsed )
 import qualified Agda.Syntax.Treeless as T
 
-import Agda.TypeChecking.Monad
+import Agda.TypeChecking.Monad hiding ( expName )
 import Agda.TypeChecking.Reduce ( instantiateFull )
 import Agda.TypeChecking.Substitute as TC ( TelV(..), raise, subst )
 import Agda.TypeChecking.Pretty

@@ -213,6 +213,8 @@ data Pragma
     --   but declare a name for an Agda concept.
   | RewritePragma Range [QName]
     -- ^ Range is range of REWRITE keyword.
+  | ExpandPragma Range [QName]
+    -- ^ Range is range of EXPAND keyword.
   | CompilePragma RString QName String
   | StaticPragma QName
   | EtaPragma QName

@@ -505,6 +505,7 @@ data Pragma
   = OptionsPragma             Range [String]
   | BuiltinPragma             Range RString QName
   | RewritePragma             Range Range [QName]        -- ^ Second Range is for REWRITE keyword.
+  | ExpandPragma              Range Range [QName]        -- ^ Second Range is for EXPAND keyword.
   | ForeignPragma             Range RString String       -- ^ first string is backend name
   | CompilePragma             Range RString QName String -- ^ first string is backend name
   | StaticPragma              Range QName
@@ -930,6 +931,7 @@ instance HasRange Pragma where
   getRange (OptionsPragma r _)               = r
   getRange (BuiltinPragma r _ _)             = r
   getRange (RewritePragma r _ _)             = r
+  getRange (ExpandPragma r _ _)              = r
   getRange (CompilePragma r _ _ _)           = r
   getRange (ForeignPragma r _ _)             = r
   getRange (StaticPragma r _)                = r
@@ -1134,6 +1136,7 @@ instance KillRange Pragma where
   killRange (OptionsPragma _ s)               = OptionsPragma noRange s
   killRange (BuiltinPragma _ s e)             = killRange1 (BuiltinPragma noRange s) e
   killRange (RewritePragma _ _ qs)            = killRange1 (RewritePragma noRange noRange) qs
+  killRange (ExpandPragma _ _ qs)             = killRange1 (ExpandPragma noRange noRange) qs
   killRange (StaticPragma _ q)                = killRange1 (StaticPragma noRange) q
   killRange (InjectivePragma _ q)             = killRange1 (InjectivePragma noRange) q
   killRange (InlinePragma _ b q)              = killRange1 (InlinePragma noRange b) q
@@ -1275,6 +1278,7 @@ instance NFData Pragma where
   rnf (OptionsPragma _ a)               = rnf a
   rnf (BuiltinPragma _ a b)             = rnf a `seq` rnf b
   rnf (RewritePragma _ _ a)             = rnf a
+  rnf (ExpandPragma _ _ a)              = rnf a
   rnf (CompilePragma _ a b c)           = rnf a `seq` rnf b `seq` rnf c
   rnf (ForeignPragma _ b s)             = rnf b `seq` rnf s
   rnf (StaticPragma _ a)                = rnf a

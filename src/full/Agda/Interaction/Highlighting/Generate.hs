@@ -221,6 +221,7 @@ tokenHighlighting = convert . mconcat . map tokenToHI
   tokenToHI :: T.Token -> HighlightingInfoBuilder
   tokenToHI (T.TokKeyword T.KwForall i)  = aToF Symbol (getRange i)
   tokenToHI (T.TokKeyword T.KwREWRITE _) = mempty  -- #4361, REWRITE is not always a Keyword
+  tokenToHI (T.TokKeyword T.KwEXPAND _)  = mempty
   tokenToHI (T.TokKeyword _ i)           = aToF Keyword (getRange i)
   tokenToHI (T.TokSymbol T.SymQuestionMark i) = aToF Hole (getRange i)
   tokenToHI (T.TokSymbol  _ i)                = aToF Symbol (getRange i)
@@ -416,6 +417,7 @@ warningHighlighting' b w = case tcWarning w of
   UnsolvedInteractionMetas{} -> mempty
   OldBuiltin{}               -> mempty
   EmptyRewritePragma{}       -> deadcodeHighlighting w
+  EmptyExpandPragma{}        -> deadcodeHighlighting w
   EmptyWhere{}               -> deadcodeHighlighting w
   IllformedAsClause{}        -> deadcodeHighlighting w
   UselessPublic{}            -> deadcodeHighlighting w

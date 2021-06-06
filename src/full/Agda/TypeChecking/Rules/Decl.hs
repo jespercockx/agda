@@ -725,6 +725,7 @@ checkPragma r p =
           where b = rangedThing rb
         A.BuiltinNoDefPragma b _kind x -> bindBuiltinNoDef (rangedThing b) x
         A.RewritePragma _ qs -> addRewriteRules qs
+        A.ExpandPragma _ qs  -> addExpandRules qs
         A.CompilePragma b x s -> do
           -- Check that x resides in the same module (or a child) as the pragma.
           x' <- defName <$> getConstInfo x  -- Get the canonical name of x.

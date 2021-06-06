@@ -1484,8 +1484,10 @@ instance ToAbstract Declarations where
        C.WarningOnImport{}  -> Nothing
        C.DisplayPragma{}    -> Nothing
        C.CatchallPragma{}   -> Nothing
-       -- @RewritePragma@ already requires --rewriting which is incompatible with --safe
+       -- @RewritePragma@ and @ExpandPragma@ already require
+       -- --rewriting which is incompatible with --safe
        C.RewritePragma{}    -> Nothing
+       C.ExpandPragma{}     -> Nothing
        -- @CompilePragma@ already handled in the nicifier
        C.CompilePragma{}    -> Nothing
 
@@ -2289,6 +2291,18 @@ instance ToAbstract C.Pragma where
       A.Con c | Just x <- getUnambiguous c -> return [ x ]
       A.Con x          -> genericError $ "REWRITE used on ambiguous name " ++ prettyShow x
       A.Var x          -> genericError $ "REWRITE used on parameter " ++ prettyShow x ++ " instead of on a defined symbol"
+      _       -> __IMPOSSIBLE__
+  toAbstract (C.ExpandPragma _ _ []) = [] <$ warning EmptyExpandPragma
+  toAbstract (C.ExpandPragma _ r xs) = singleton . A.ExpandPragma r . concat <$> do
+   forM xs $ \ x -> do
+    e <- toAbstract $ OldQName x Nothing
+    case e of
+      A.Def x          -> return [ x ]
+      A.Proj _ p | Just x <- getUnambiguous p -> return [ x ]
+      A.Proj _ x       -> genericError $ "EXPAND used on ambiguous name " ++ prettyShow x
+      A.Con c | Just x <- getUnambiguous c -> return [ x ]
+      A.Con x          -> genericError $ "EXPAND used on ambiguous name " ++ prettyShow x
+      A.Var x          -> genericError $ "EXPAND used on parameter " ++ prettyShow x ++ " instead of on a defined symbol"
       _       -> __IMPOSSIBLE__
   toAbstract (C.ForeignPragma _ rb s) = [] <$ addForeignCode (rangedThing rb) s
   toAbstract (C.CompilePragma _ rb x s) = do

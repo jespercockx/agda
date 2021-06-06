@@ -661,6 +661,8 @@ niceDeclarations fixs ds = do
         instanceBlock r =<< niceAxioms InstanceBlock decls
       Pragma p@(RewritePragma r _ _) -> do
         return [ NicePragma r p ]
+      Pragma p@(ExpandPragma r _ _) -> do
+        return [ NicePragma r p ]
       d -> declarationException $ WrongContentBlock b $ getRange d
 
     toPrim :: NiceDeclaration -> NiceDeclaration
@@ -1033,9 +1035,11 @@ niceDeclarations fixs ds = do
               -- Thus, we do not handle BUILTINs in mutual blocks (at least for now).
               BuiltinPragma{}           -> invalid "BUILTIN pragmas"
 
-              -- The REWRITE pragma behaves differently before or after the def.
-              -- and affects type checking.  Thus, we refuse it here.
+              -- The REWRITE and EXPAND pragmas behave differently
+              -- before or after the def.  and affects type checking.
+              -- Thus, we refuse them here.
               RewritePragma{}           -> invalid "REWRITE pragmas"
+              ExpandPragma{}            -> invalid "EXPAND pragmas"
 
               -- Compiler pragmas are not needed for type checking, thus,
               -- can go to the bottom.

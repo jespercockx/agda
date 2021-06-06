@@ -1556,6 +1556,7 @@ data Signature = Sig
       { _sigSections    :: Sections
       , _sigDefinitions :: Definitions
       , _sigRewriteRules:: RewriteRuleMap  -- ^ The rewrite rules defined in this file.
+      , _sigExpandRules :: ExpandRuleMap
       }
   deriving (Show, Generic)
 
@@ -1574,9 +1575,15 @@ sigRewriteRules f s =
   f (_sigRewriteRules s) <&>
   \x -> s {_sigRewriteRules = x}
 
+sigExpandRules :: Lens' ExpandRuleMap Signature
+sigExpandRules f s =
+  f (_sigExpandRules s) <&>
+  \x -> s {_sigExpandRules = x}
+
 type Sections    = Map ModuleName Section
 type Definitions = HashMap QName Definition
 type RewriteRuleMap = HashMap QName RewriteRules
+type ExpandRuleMap = HashMap QName ExpandRules
 type DisplayForms = HashMap QName [LocalDisplayForm]
 
 newtype Section = Section { _secTelescope :: Telescope }
@@ -1591,7 +1598,7 @@ secTelescope f s =
   \x -> s {_secTelescope = x}
 
 emptySignature :: Signature
-emptySignature = Sig Map.empty HMap.empty HMap.empty
+emptySignature = Sig Map.empty HMap.empty HMap.empty HMap.empty
 
 -- | A @DisplayForm@ is in essence a rewrite rule @q ts --> dt@ for a defined symbol (could be a
 --   constructor as well) @q@. The right hand side is a 'DisplayTerm' which is used to 'reify' to a
@@ -1703,6 +1710,7 @@ data NLPSort
   deriving (Data, Show, Generic)
 
 type RewriteRules = [RewriteRule]
+type ExpandRules  = [ExpandRule]
 
 -- | Rewrite rules can be added independently from function clauses.
 data RewriteRule = RewriteRule
@@ -1714,6 +1722,16 @@ data RewriteRule = RewriteRule
   , rewRHS     :: Term       -- ^ @Γ ⊢ rhs : t@.
   , rewType    :: Type       -- ^ @Γ ⊢ t@.
   , rewFromClause :: Bool    -- ^ Was this rewrite rule created from a clause in the definition of the function?
+  }
+    deriving (Data, Show, Generic)
+
+-- | Expand rules can be added to any named type constructor.
+data ExpandRule = ExpandRule
+  { expName    :: QName      -- ^ Name of expand rule @q : Γ → (x : r ps) → x ≡ rhs@
+  , expContext :: Telescope  -- ^ @Γ@
+  , expHead    :: QName      -- ^ @r@
+  , expPats    :: PElims     -- ^ @Γ ⊢ r ps : s@
+  , expRHS     :: Term       -- ^ @Γ , x : r ps ⊢ rhs : r ps@
   }
     deriving (Data, Show, Generic)
 
@@ -3252,6 +3270,8 @@ data Warning
     -- ^ In `OldBuiltin old new`, the BUILTIN old has been replaced by new
   | EmptyRewritePragma
     -- ^ If the user wrote just @{-\# REWRITE \#-}@.
+  | EmptyExpandPragma
+    -- ^ If the user wrote just @{-\# EXPAND \#-}@.
   | EmptyWhere
     -- ^ An empty @where@ block is dead code.
   | IllformedAsClause String
@@ -3381,6 +3401,7 @@ warningName = \case
   CoverageNoExactSplit{}       -> CoverageNoExactSplit_
   DeprecationWarning{}         -> DeprecationWarning_
   EmptyRewritePragma           -> EmptyRewritePragma_
+  EmptyExpandPragma            -> EmptyExpandPragma_
   EmptyWhere                   -> EmptyWhere_
   IllformedAsClause{}          -> IllformedAsClause_
   WrongInstanceDeclaration{}   -> WrongInstanceDeclaration_
@@ -4498,7 +4519,7 @@ getGeneralizedFieldName q
 ---------------------------------------------------------------------------
 
 instance KillRange Signature where
-  killRange (Sig secs defs rews) = killRange2 Sig secs defs rews
+  killRange (Sig secs defs rews exps) = killRange4 Sig secs defs rews exps
 
 instance KillRange Sections where
   killRange = fmap killRange
@@ -4507,6 +4528,9 @@ instance KillRange Definitions where
   killRange = fmap killRange
 
 instance KillRange RewriteRuleMap where
+  killRange = fmap killRange
+
+instance KillRange ExpandRuleMap where
   killRange = fmap killRange
 
 instance KillRange Section where
@@ -4542,6 +4566,10 @@ instance KillRange NLPSort where
 instance KillRange RewriteRule where
   killRange (RewriteRule q gamma f es rhs t c) =
     killRange6 RewriteRule q gamma f es rhs t c
+
+instance KillRange ExpandRule where
+  killRange (ExpandRule q gamma r es rhs) =
+    killRange5 ExpandRule q gamma r es rhs
 
 instance KillRange CompiledRepresentation where
   killRange = id
@@ -4689,6 +4717,7 @@ instance NFData NLPat
 instance NFData NLPType
 instance NFData NLPSort
 instance NFData RewriteRule
+instance NFData ExpandRule
 instance NFData Definition
 instance NFData Polarity
 instance NFData IsForced

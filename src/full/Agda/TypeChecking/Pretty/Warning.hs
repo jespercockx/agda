@@ -124,6 +124,8 @@ prettyWarning = \case
 
     EmptyRewritePragma -> fsep . pwords $ "Empty REWRITE pragma"
 
+    EmptyExpandPragma  -> fsep . pwords $ "Empty EXPAND pragma"
+
     EmptyWhere         -> fsep . pwords $ "Empty `where' block (ignored)"
 
     IllformedAsClause s -> fsep . pwords $

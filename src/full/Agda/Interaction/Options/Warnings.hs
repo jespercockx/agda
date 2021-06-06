@@ -177,6 +177,7 @@ data WarningName
   -- Nicifer Warnings
   | EmptyAbstract_
   | EmptyConstructor_
+  | EmptyExpandPragma_
   | EmptyField_
   | EmptyGeneralize_
   | EmptyInstance_
@@ -333,6 +334,7 @@ warningNameDescription = \case
   -- Nicifer Warnings
   EmptyAbstract_                   -> "Empty `abstract' blocks."
   EmptyConstructor_                -> "Empty `constructor' blocks."
+  EmptyExpandPragma_               -> "Empty `EXPAND' pragmas."
   EmptyField_                      -> "Empty `field` blocks."
   EmptyGeneralize_                 -> "Empty `variable' blocks."
   EmptyInstance_                   -> "Empty `instance' blocks."

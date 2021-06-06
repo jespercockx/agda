@@ -390,6 +390,7 @@ instance ExprLike Pragma where
       OptionsPragma{}             -> pure p
       BuiltinNoDefPragma{}        -> pure p
       RewritePragma{}             -> pure p
+      ExpandPragma{}              -> pure p
       CompilePragma{}             -> pure p
       StaticPragma{}              -> pure p
       InjectivePragma{}           -> pure p
@@ -511,6 +512,7 @@ instance DeclaredNames Pragma where
     BuiltinPragma{}         -> mempty
     CompilePragma{}         -> mempty
     RewritePragma{}         -> mempty
+    ExpandPragma{}          -> mempty
     StaticPragma{}          -> mempty
     EtaPragma{}             -> mempty
     InjectivePragma{}       -> mempty

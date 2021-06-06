@@ -92,6 +92,7 @@ instance MonadDebug ReduceM where
 
 instance HasConstInfo ReduceM where
   getRewriteRulesFor = defaultGetRewriteRulesFor
+  getExpandRulesFor = defaultGetExpandRulesFor
   getConstInfo' q = do
     ReduceEnv env st <- askR
     defaultGetConstInfo st env q

@@ -27,7 +27,7 @@ data Keyword
         | KwNON_COVERING
         | KwWARNING_ON_USAGE | KwWARNING_ON_IMPORT
         | KwMEASURE | KwDISPLAY
-        | KwREWRITE
+        | KwREWRITE | KwEXPAND
         | KwQuote | KwQuoteTerm
         | KwUnquote | KwUnquoteDecl | KwUnquoteDef
         | KwSyntax

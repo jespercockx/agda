@@ -154,6 +154,7 @@ import Agda.Utils.Impossible
     'CATCHALL'                { TokKeyword KwCATCHALL $$ }
     'DISPLAY'                 { TokKeyword KwDISPLAY $$ }
     'ETA'                     { TokKeyword KwETA $$ }
+    'EXPAND'                  { TokKeyword KwEXPAND $$ }
     'FOREIGN'                 { TokKeyword KwFOREIGN $$ }
     'COMPILE'                 { TokKeyword KwCOMPILE $$ }
     'IMPOSSIBLE'              { TokKeyword KwIMPOSSIBLE $$ }

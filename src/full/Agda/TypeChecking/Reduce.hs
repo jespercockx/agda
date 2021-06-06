@@ -1398,7 +1398,7 @@ instance InstantiateFull CompareAs where
   instantiateFull' AsTypes       = return AsTypes
 
 instance InstantiateFull Signature where
-  instantiateFull' (Sig a b c) = uncurry3 Sig <$> instantiateFull' (a, b, c)
+  instantiateFull' (Sig a b c d) = uncurry4 Sig <$> instantiateFull' (a, b, c, d)
 
 instance InstantiateFull Section where
   instantiateFull' (Section tel) = Section <$> instantiateFull' tel
@@ -1442,6 +1442,14 @@ instance InstantiateFull RewriteRule where
       <*> instantiateFull' rhs
       <*> instantiateFull' t
       <*> pure c
+
+instance InstantiateFull ExpandRule where
+  instantiateFull' (ExpandRule q gamma r ps rhs) =
+    ExpandRule q
+      <$> instantiateFull' gamma
+      <*> pure r
+      <*> instantiateFull' ps
+      <*> instantiateFull' rhs
 
 instance InstantiateFull DisplayForm where
   instantiateFull' (Display n ps v) = uncurry (Display n) <$> instantiateFull' (ps, v)

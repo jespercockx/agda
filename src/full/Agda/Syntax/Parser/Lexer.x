@@ -87,6 +87,7 @@ tokens :-
 <pragma_>   "FOREIGN"                  { endWith $ beginWith fpragma $ keyword KwFOREIGN }
 <pragma_>   "DISPLAY"                  { keyword KwDISPLAY }
 <pragma_>   "ETA"                      { keyword KwETA }
+<pragma_>   "EXPAND"                   { keyword KwEXPAND }
 <pragma_>   "IMPOSSIBLE"               { keyword KwIMPOSSIBLE }
 <pragma_>   "INJECTIVE"                { keyword KwINJECTIVE }
 <pragma_>   "INLINE"                   { keyword KwINLINE }

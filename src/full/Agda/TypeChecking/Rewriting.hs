@@ -444,3 +444,21 @@ rewrite block hd rules es = do
 
     rewArity :: RewriteRule -> Int
     rewArity = length . rewPats
+
+
+-- | Check the given expand rules and add them to the signature.
+addExpandRules :: [QName] -> TCM ()
+addExpandRules qs = do
+  -- Check the expand rules
+  exps <- mapM checkExpandRule qs
+
+  -- Add expand rules to the signature
+  forM_ exps $ \exp -> do
+    let r = expHead exp
+    reportSDoc "rewriting" 10 $
+      "adding rule" <+> prettyTCM (expName exp) <+>
+      "to the definition of" <+> prettyTCM r
+    modifySignature $ addExpandRulesFor r [exp]
+
+checkExpandRule :: QName -> TCM ExpandRule
+checkExpandRule q = __IMPOSSIBLE__ -- TODO

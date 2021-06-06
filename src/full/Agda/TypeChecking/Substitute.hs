@@ -251,6 +251,21 @@ instance Apply RewriteRule where
 
   applyE t es = apply t $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
 
+instance Apply ExpandRule where
+  apply r args =
+    let newContext = apply (expContext r) args
+        sub        = liftS (size newContext) $ parallelS $
+                       reverse $ map (PTerm . unArg) args
+    in ExpandRule
+       { expName    = expName r
+       , expContext = newContext
+       , expHead    = expHead r
+       , expPats    = applySubst sub (expPats r)
+       , expRHS     = applyNLPatSubst (liftS 1 sub) (expRHS r)
+       }
+
+  applyE t es = apply t $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es
+
 instance {-# OVERLAPPING #-} Apply [Occ.Occurrence] where
   apply occ args = List.drop (length args) occ
   applyE t es = apply t $ fromMaybe __IMPOSSIBLE__ $ allApplyElims es

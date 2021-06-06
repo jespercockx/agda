@@ -181,10 +181,11 @@ markInjective q = modifyGlobalDefinition q $ \def -> def { defInjective = True }
 unionSignatures :: [Signature] -> Signature
 unionSignatures ss = foldr unionSignature emptySignature ss
   where
-    unionSignature (Sig a b c) (Sig a' b' c') =
+    unionSignature (Sig a b c d) (Sig a' b' c' d') =
       Sig (Map.union a a')
           (HMap.union b b')              -- definitions are unique (in at most one module)
           (HMap.unionWith mappend c c')  -- rewrite rules are accumulated
+          (HMap.unionWith mappend d d')  -- expand rules also
 
 -- | Add a section to the signature.
 --
@@ -711,6 +712,9 @@ class ( Functor m
   -- | Lookup the rewrite rules with the given head symbol.
   getRewriteRulesFor :: QName -> m RewriteRules
 
+  -- | Lookup the expand rules with the given head symbol.
+  getExpandRulesFor :: QName -> m ExpandRules
+
   -- Lifting HasConstInfo through monad transformers:
 
   default getConstInfo'
@@ -723,6 +727,11 @@ class ( Functor m
     => QName -> m RewriteRules
   getRewriteRulesFor = lift . getRewriteRulesFor
 
+  default getExpandRulesFor
+    :: (HasConstInfo n, MonadTrans t, m ~ t n)
+    => QName -> m ExpandRules
+  getExpandRulesFor = lift . getExpandRulesFor
+
 {-# SPECIALIZE getConstInfo :: QName -> TCM Definition #-}
 
 defaultGetRewriteRulesFor :: (ReadTCState m, MonadTCEnv m) => QName -> m RewriteRules
@@ -733,6 +742,14 @@ defaultGetRewriteRulesFor q = ifNotM (shouldReduceDef q) (return []) $ do
       look s = HMap.lookup q $ s ^. sigRewriteRules
   return $ mconcat $ catMaybes [look sig, look imp]
 
+defaultGetExpandRulesFor :: (ReadTCState m, MonadTCEnv m) => QName -> m ExpandRules
+defaultGetExpandRulesFor q = do
+  st <- getTCState
+  let sig = st^.stSignature
+      imp = st^.stImports
+      look s = HMap.lookup q $ s ^. sigExpandRules
+  return $ mconcat $ catMaybes [look sig, look imp]
+
 -- | Get the original name of the projection
 --   (the current one could be from a module application).
 getOriginalProjection :: HasConstInfo m => QName -> m QName
@@ -740,6 +757,7 @@ getOriginalProjection q = projOrig . fromMaybe __IMPOSSIBLE__ <$> isProjection q
 
 instance HasConstInfo (TCMT IO) where
   getRewriteRulesFor = defaultGetRewriteRulesFor
+  getExpandRulesFor = defaultGetExpandRulesFor
   getConstInfo' q = do
     st  <- getTC
     env <- askTC
@@ -1060,6 +1078,19 @@ instantiateRewriteRules :: (Functor m, HasConstInfo m, HasOptions m,
                             ReadTCState m, MonadTCEnv m, MonadDebug m)
                         => RewriteRules -> m RewriteRules
 instantiateRewriteRules = mapM instantiateRewriteRule
+
+
+instantiateExpandRule :: (Functor m, HasConstInfo m, HasOptions m,
+                           ReadTCState m, MonadTCEnv m, MonadDebug m)
+                       => ExpandRule -> m ExpandRule
+instantiateExpandRule exp = do
+  vs <- freeVarsToApply $ expName exp
+  return $ exp `apply` vs
+
+instantiateExpandRules :: (Functor m, HasConstInfo m, HasOptions m,
+                            ReadTCState m, MonadTCEnv m, MonadDebug m)
+                        => ExpandRules -> m ExpandRules
+instantiateExpandRules = mapM instantiateExpandRule
 
 -- | Give the abstract view of a definition.
 makeAbstract :: Definition -> Maybe Definition

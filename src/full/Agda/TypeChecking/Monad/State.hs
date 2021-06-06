@@ -269,6 +269,10 @@ addRewriteRulesFor f rews matchables =
 
       hasProjectionPattern rew = any (isJust . isProjElim) $ rewPats rew
 
+-- ** Modifiers for expand rules
+addExpandRulesFor :: QName -> ExpandRules -> Signature -> Signature
+addExpandRulesFor f exps = over sigExpandRules (HMap.insertWith mappend f exps)
+
 setMatchableSymbols :: QName -> [QName] -> Signature -> Signature
 setMatchableSymbols f matchables =
   foldr ((.) . (\g -> updateDefinition g setMatchable)) id matchables
