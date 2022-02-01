@@ -149,8 +149,8 @@ data DeclKind
 
 declKind :: NiceDeclaration -> DeclKind
 declKind (FunSig r _ _ _ _ _ tc cc x _)     = LoneSigDecl r (FunName tc cc) x
-declKind (NiceRecSig r _ _ pc uc x pars _)  = LoneSigDecl r (RecName pc uc) x
-declKind (NiceDataSig r _ _ pc uc x pars _) = LoneSigDecl r (DataName pc uc) x
+declKind (NiceRecSig r _ _ i pc uc x pars _) = LoneSigDecl r (RecName pc uc) x
+declKind (NiceDataSig r _ _ i pc uc x pars _) = LoneSigDecl r (DataName pc uc) x
 declKind (FunDef r _ abs ins tc cc x _)     = LoneDefs (FunName tc cc) [x]
 declKind (NiceDataDef _ _ _ pc uc x pars _) = LoneDefs (DataName pc uc) [x]
 declKind (NiceRecDef _ _ _ pc uc x _ pars _) = LoneDefs (RecName pc uc) [x]
@@ -200,12 +200,12 @@ replaceSigs ps = if Map.null ps then id else \case
         -- #4881: Don't use the unique NameId for NoName lookups.
         let x = if isNoName x' then noName (nameRange x') else x' in
         Just (x, Axiom r acc abst inst argi x' e)
-      NiceRecSig r acc abst _ _ x pars t ->
+      NiceRecSig r acc abst i _ _ x pars t ->
         let e = Generalized $ makePi (lamBindingsToTelescope r pars) t in
-        Just (x, Axiom r acc abst NotInstanceDef defaultArgInfo x e)
-      NiceDataSig r acc abst _ _ x pars t ->
+        Just (x, Axiom r acc abst NotInstanceDef i x e)
+      NiceDataSig r acc abst i _ _ x pars t ->
         let e = Generalized $ makePi (lamBindingsToTelescope r pars) t in
-        Just (x, Axiom r acc abst NotInstanceDef defaultArgInfo x e)
+        Just (x, Axiom r acc abst NotInstanceDef i x e)
       _ -> Nothing
 
 -- | Main. Fixities (or more precisely syntax declarations) are needed when
@@ -353,13 +353,13 @@ niceDeclarations fixs ds = do
         Field r [] -> justWarning $ EmptyField r
         Field _ fs -> (,ds) <$> niceAxioms FieldBlock fs
 
-        DataSig r x tel t -> do
+        DataSig r i x tel t -> do
           pc <- use positivityCheckPragma
           uc <- use universeCheckPragma
           _ <- addLoneSig r x $ DataName pc uc
-          (,ds) <$> dataOrRec pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x (Just (tel, t)) Nothing
+          (,ds) <$> dataOrRec i pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x (Just (tel, t)) Nothing
 
-        Data r x tel t cs -> do
+        Data r i x tel t cs -> do
           pc <- use positivityCheckPragma
           -- Andreas, 2018-10-27, issue #3327
           -- Propagate {-# NO_UNIVERSE_CHECK #-} pragma from signature to definition.
@@ -368,7 +368,7 @@ niceDeclarations fixs ds = do
           uc <- use universeCheckPragma
           uc <- if uc == NoUniverseCheck then return uc else getUniverseCheckFromSig x
           mt <- defaultTypeSig (DataName pc uc) x (Just t)
-          (,ds) <$> dataOrRec pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x ((tel,) <$> mt) (Just (tel, cs))
+          (,ds) <$> dataOrRec i pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x ((tel,) <$> mt) (Just (tel, cs))
 
         DataDef r x tel cs -> do
           pc <- use positivityCheckPragma
@@ -379,15 +379,15 @@ niceDeclarations fixs ds = do
           uc <- use universeCheckPragma
           uc <- if uc == NoUniverseCheck then return uc else getUniverseCheckFromSig x
           mt <- defaultTypeSig (DataName pc uc) x Nothing
-          (,ds) <$> dataOrRec pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x ((tel,) <$> mt) (Just (tel, cs))
+          (,ds) <$> dataOrRec defaultArgInfo pc uc NiceDataDef NiceDataSig (niceAxioms DataBlock) r x ((tel,) <$> mt) (Just (tel, cs))
 
-        RecordSig r x tel t         -> do
+        RecordSig r i x tel t         -> do
           pc <- use positivityCheckPragma
           uc <- use universeCheckPragma
           _ <- addLoneSig r x $ RecName pc uc
-          return ([NiceRecSig r PublicAccess ConcreteDef pc uc x tel t] , ds)
+          return ([NiceRecSig r PublicAccess ConcreteDef i pc uc x tel t] , ds)
 
-        Record r x dir tel t cs   -> do
+        Record r i x dir tel t cs   -> do
           pc <- use positivityCheckPragma
           -- Andreas, 2018-10-27, issue #3327
           -- Propagate {-# NO_UNIVERSE_CHECK #-} pragma from signature to definition.
@@ -396,7 +396,7 @@ niceDeclarations fixs ds = do
           uc <- use universeCheckPragma
           uc <- if uc == NoUniverseCheck then return uc else getUniverseCheckFromSig x
           mt <- defaultTypeSig (RecName pc uc) x (Just t)
-          (,ds) <$> dataOrRec pc uc (\ r o a pc uc x tel cs -> NiceRecDef r o a pc uc x dir tel cs) NiceRecSig
+          (,ds) <$> dataOrRec i pc uc (\ r o a pc uc x tel cs -> NiceRecDef r o a pc uc x dir tel cs) NiceRecSig
                       return r x ((tel,) <$> mt) (Just (tel, cs))
 
         RecordDef r x dir tel cs   -> do
@@ -408,7 +408,7 @@ niceDeclarations fixs ds = do
           uc <- use universeCheckPragma
           uc <- if uc == NoUniverseCheck then return uc else getUniverseCheckFromSig x
           mt <- defaultTypeSig (RecName pc uc) x Nothing
-          (,ds) <$> dataOrRec pc uc (\ r o a pc uc x tel cs -> NiceRecDef r o a pc uc x dir tel cs) NiceRecSig
+          (,ds) <$> dataOrRec defaultArgInfo pc uc (\ r o a pc uc x tel cs -> NiceRecDef r o a pc uc x dir tel cs) NiceRecSig
                       return r x ((tel,) <$> mt) (Just (tel, cs))
 
         RecordDirective r -> justWarning $ InvalidRecordDirective (getRange r)
@@ -621,11 +621,12 @@ niceDeclarations fixs ds = do
 
     dataOrRec
       :: forall a decl
-      .  PositivityCheck
+      .  ArgInfo
+      -> PositivityCheck
       -> UniverseCheck
       -> (Range -> Origin -> IsAbstract -> PositivityCheck -> UniverseCheck -> Name -> [LamBinding] -> [decl] -> NiceDeclaration)
          -- Construct definition.
-      -> (Range -> Access -> IsAbstract -> PositivityCheck -> UniverseCheck -> Name -> [LamBinding] -> Expr -> NiceDeclaration)
+      -> (Range -> Access -> IsAbstract -> ArgInfo -> PositivityCheck -> UniverseCheck -> Name -> [LamBinding] -> Expr -> NiceDeclaration)
          -- Construct signature.
       -> ([a] -> Nice [decl])        -- Constructor checking.
       -> Range
@@ -633,7 +634,7 @@ niceDeclarations fixs ds = do
       -> Maybe ([LamBinding], Expr)  -- Parameters and type.  If not @Nothing@ a signature is created.
       -> Maybe ([LamBinding], [a])   -- Parameters and constructors.  If not @Nothing@, a definition body is created.
       -> Nice [NiceDeclaration]
-    dataOrRec pc uc mkDef mkSig niceD r x mt mcs = do
+    dataOrRec ai pc uc mkDef mkSig niceD r x mt mcs = do
       mds <- Trav.forM mcs $ \ (tel, cs) -> (tel,) <$> niceD cs
       -- We set origin to UserWritten if the user split the data/rec herself,
       -- and to Inserted if the she wrote a single declaration that we're
@@ -642,7 +643,7 @@ niceDeclarations fixs ds = do
       let o | isJust mt && isJust mcs = Inserted
             | otherwise               = UserWritten
       return $ catMaybes $
-        [ mt  <&> \ (tel, t)  -> mkSig (fuseRange x t) PublicAccess ConcreteDef pc uc x tel t
+        [ mt  <&> \ (tel, t)  -> mkSig (fuseRange x t) PublicAccess ConcreteDef ai pc uc x tel t
         , mds <&> \ (tel, ds) -> mkDef r o ConcreteDef pc uc x (caseMaybe mt tel $ const $ concatMap dropTypeAndModality tel) ds
           -- If a type is given (mt /= Nothing), we have to delete the types in @tel@
           -- for the data definition, lest we duplicate them. And also drop modalities (#1886).
@@ -826,7 +827,7 @@ niceDeclarations fixs ds = do
            addType n (\ i -> InterleavedFun i d Nothing) checks
         addFunType _ = __IMPOSSIBLE__
 
-        addDataType d@(NiceDataSig _ _ _ pc uc n _ _) = do
+        addDataType d@(NiceDataSig _ _ _ _ pc uc n _ _) = do
           let checks = MutualChecks [] [] [pc]
           addType n (\ i -> InterleavedData i d Nothing) checks
         addDataType _ = __IMPOSSIBLE__
@@ -1163,9 +1164,9 @@ niceDeclarations fixs ds = do
         -- NO_POSITIVITY_CHECK pragma. See Issue 1614.
         positivityCheckOldMutual :: NiceDeclaration -> PositivityCheck
         positivityCheckOldMutual (NiceDataDef _ _ _ pc _ _ _ _) = pc
-        positivityCheckOldMutual (NiceDataSig _ _ _ pc _ _ _ _) = pc
+        positivityCheckOldMutual (NiceDataSig _ _ _ _ pc _ _ _ _) = pc
         positivityCheckOldMutual (NiceMutual _ _ _ pc _)        = pc
-        positivityCheckOldMutual (NiceRecSig _ _ _ pc _ _ _ _)  = pc
+        positivityCheckOldMutual (NiceRecSig _ _ _ _ pc _ _ _ _)  = pc
         positivityCheckOldMutual (NiceRecDef _ _ _ pc _ _ _ _ _) = pc
         positivityCheckOldMutual _                              = YesPositivityCheck
 
@@ -1280,8 +1281,8 @@ instance MakeAbstract NiceDeclaration where
       -- (thus, do not notify progress with @dirty@).
       Axiom r p a i rel x e          -> return $ Axiom             r p AbstractDef i rel x e
       FunSig r p a i m rel tc cc x e -> return $ FunSig            r p AbstractDef i m rel tc cc x e
-      NiceRecSig r p a pc uc x ls t  -> return $ NiceRecSig        r p AbstractDef pc uc x ls t
-      NiceDataSig r p a pc uc x ls t -> return $ NiceDataSig       r p AbstractDef pc uc x ls t
+      NiceRecSig r p a i pc uc x ls t -> return $ NiceRecSig       r p AbstractDef i pc uc x ls t
+      NiceDataSig r p a i pc uc x ls t -> return $ NiceDataSig     r p AbstractDef i pc uc x ls t
       NiceField r p _ i tac x e      -> return $ NiceField         r p AbstractDef i tac x e
       PrimitiveFunction r p _ x e    -> return $ PrimitiveFunction r p AbstractDef x e
       -- Andreas, 2016-07-17 it does have effect on unquoted defs.
@@ -1344,8 +1345,8 @@ instance MakePrivate NiceDeclaration where
       NiceModule r p a x tel ds                -> (\ p -> NiceModule r p a x tel ds)            <$> mkPrivate o p
       NiceModuleMacro r p x ma op is           -> (\ p -> NiceModuleMacro r p x ma op is)       <$> mkPrivate o p
       FunSig r p a i m rel tc cc x e           -> (\ p -> FunSig r p a i m rel tc cc x e)       <$> mkPrivate o p
-      NiceRecSig r p a pc uc x ls t            -> (\ p -> NiceRecSig r p a pc uc x ls t)        <$> mkPrivate o p
-      NiceDataSig r p a pc uc x ls t           -> (\ p -> NiceDataSig r p a pc uc x ls t)       <$> mkPrivate o p
+      NiceRecSig r p a i pc uc x ls t          -> (\ p -> NiceRecSig r p a i pc uc x ls t)      <$> mkPrivate o p
+      NiceDataSig r p a i pc uc x ls t         -> (\ p -> NiceDataSig r p a i pc uc x ls t)     <$> mkPrivate o p
       NiceFunClause r p a tc cc catchall d     -> (\ p -> NiceFunClause r p a tc cc catchall d) <$> mkPrivate o p
       NiceUnquoteDecl r p a i tc cc x e        -> (\ p -> NiceUnquoteDecl r p a i tc cc x e)    <$> mkPrivate o p
       NiceUnquoteDef r p a tc cc x e           -> (\ p -> NiceUnquoteDef r p a tc cc x e)       <$> mkPrivate o p
@@ -1395,8 +1396,8 @@ notSoNiceDeclarations = \case
     NiceOpen r x dir               -> [Open r x dir]
     NiceImport r x as o dir        -> [Import r x as o dir]
     NicePragma _ p                 -> [Pragma p]
-    NiceRecSig r _ _ _ _ x bs e    -> [RecordSig r x bs e]
-    NiceDataSig r _ _ _ _ x bs e   -> [DataSig r x bs e]
+    NiceRecSig r _ _ i _ _ x bs e  -> [RecordSig r i x bs e]
+    NiceDataSig r _ _ i _ _ x bs e -> [DataSig r i x bs e]
     NiceFunClause _ _ _ _ _ _ d    -> [d]
     FunSig _ _ _ i _ rel _ _ x e   -> inst i [TypeSig rel Nothing x e]
     FunDef _ ds _ _ _ _ _ _        -> ds

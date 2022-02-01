@@ -173,8 +173,8 @@ checkDecl d = setCurrentRange d $ do
                                           ]
 
                                     return (blockId, Set.singleton x)
-      A.DataSig i x ps t       -> impossible $ checkSig DataName i x ps t
-      A.RecSig i x ps t        -> none $ checkSig RecName i x ps t
+      A.DataSig i ai x ps t    -> impossible $ checkSig DataName i ai x ps t
+      A.RecSig i ai x ps t     -> none $ checkSig RecName i ai x ps t
                                   -- A record signature is always followed by a
                                   -- record definition. Metas should not be
                                   -- frozen until after the definition has been
@@ -221,8 +221,8 @@ checkDecl d = setCurrentRange d $ do
     where
 
     -- check record or data type signature
-    checkSig kind i x gtel t = checkTypeSignature' (Just gtel) $
-      A.Axiom kind i defaultArgInfo Nothing x t
+    checkSig kind i ai x gtel t = checkTypeSignature' (Just gtel) $
+      A.Axiom kind i ai Nothing x t
 
     -- Switch maybe to abstract mode, benchmark, and debug print bracket.
     check :: forall m i a

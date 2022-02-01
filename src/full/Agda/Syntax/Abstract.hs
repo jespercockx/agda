@@ -174,9 +174,9 @@ data Declaration
   | Open       ModuleInfo ModuleName ImportDirective
     -- ^ only retained for highlighting purposes
   | FunDef     DefInfo QName Delayed [Clause] -- ^ sequence of function clauses
-  | DataSig    DefInfo QName GeneralizeTelescope Expr -- ^ lone data signature
+  | DataSig    DefInfo ArgInfo QName GeneralizeTelescope Expr -- ^ lone data signature
   | DataDef    DefInfo QName UniverseCheck DataDefParams [Constructor]
-  | RecSig     DefInfo QName GeneralizeTelescope Expr -- ^ lone record signature
+  | RecSig     DefInfo ArgInfo QName GeneralizeTelescope Expr -- ^ lone record signature
   | RecDef     DefInfo QName UniverseCheck RecordDirectives DataDefParams Expr [Declaration]
       -- ^ The 'Expr' gives the constructor type telescope, @(x1 : A1)..(xn : An) -> Prop@,
       --   and the optional name is the constructor's name.
@@ -575,9 +575,9 @@ instance Eq Declaration where
   Pragma a1 b1                   == Pragma a2 b2                   = (a1, b1) == (a2, b2)
   Open a1 b1 c1                  == Open a2 b2 c2                  = (a1, b1, c1) == (a2, b2, c2)
   FunDef a1 b1 c1 d1             == FunDef a2 b2 c2 d2             = (a1, b1, c1, d1) == (a2, b2, c2, d2)
-  DataSig a1 b1 c1 d1            == DataSig a2 b2 c2 d2            = (a1, b1, c1, d1) == (a2, b2, c2, d2)
+  DataSig a1 b1 c1 d1 e1         == DataSig a2 b2 c2 d2 e2         = (a1, b1, c1, d1, e2) == (a2, b2, c2, d2, e2)
   DataDef a1 b1 c1 d1 e1         == DataDef a2 b2 c2 d2 e2         = (a1, b1, c1, d1, e1) == (a2, b2, c2, d2, e2)
-  RecSig a1 b1 c1 d1             == RecSig a2 b2 c2 d2             = (a1, b1, c1, d1) == (a2, b2, c2, d2)
+  RecSig a1 b1 c1 d1 e1          == RecSig a2 b2 c2 d2 e2          = (a1, b1, c1, d1, e2) == (a2, b2, c2, d2, e2)
   RecDef a1 b1 c1 d1 e1 f1 g1    == RecDef a2 b2 c2 d2 e2 f2 g2    = (a1, b1, c1, d1, e1, f1, g1) == (a2, b2, c2, d2, e2, f2, g2)
   PatternSynDef a1 b1 c1         == PatternSynDef a2 b2 c2         = (a1, b1, c1) == (a2, b2, c2)
   UnquoteDecl a1 b1 c1 d1        == UnquoteDecl a2 b2 c2 d2        = (a1, b1, c1, d1) == (a2, b2, c2, d2)
@@ -654,9 +654,9 @@ instance HasRange Declaration where
     getRange (Open       i _ _      ) = getRange i
     getRange (ScopedDecl _ d        ) = getRange d
     getRange (FunDef     i _ _ _    ) = getRange i
-    getRange (DataSig    i _ _ _    ) = getRange i
+    getRange (DataSig    i _ _ _ _  ) = getRange i
     getRange (DataDef    i _ _ _ _  ) = getRange i
-    getRange (RecSig     i _ _ _    ) = getRange i
+    getRange (RecSig     i _ _ _ _  ) = getRange i
     getRange (RecDef i _ _ _ _ _ _)   = getRange i
     getRange (PatternSynDef x _ _   ) = getRange x
     getRange (UnquoteDecl _ i _ _)    = getRange i
@@ -787,9 +787,9 @@ instance KillRange Declaration where
   killRange (Open       i x dir       ) = killRange3 Open       i x dir
   killRange (ScopedDecl a d           ) = killRange1 (ScopedDecl a) d
   killRange (FunDef  i a b c          ) = killRange4 FunDef  i a b c
-  killRange (DataSig i a b c          ) = killRange4 DataSig i a b c
+  killRange (DataSig i a b c d        ) = killRange5 DataSig i a b c d
   killRange (DataDef i a b c d        ) = killRange5 DataDef i a b c d
-  killRange (RecSig  i a b c          ) = killRange4 RecSig  i a b c
+  killRange (RecSig  i a b c d        ) = killRange5 RecSig  i a b c d
   killRange (RecDef  i a b c d e f    ) = killRange7 RecDef  i a b c d e f
   killRange (PatternSynDef x xs p     ) = killRange3 PatternSynDef x xs p
   killRange (UnquoteDecl mi i x e     ) = killRange4 UnquoteDecl mi i x e
@@ -904,8 +904,8 @@ instance AnyAbstract Declaration where
   anyAbstract (FunDef i _ _ _)       = defAbstract i == AbstractDef
   anyAbstract (DataDef i _ _ _ _)    = defAbstract i == AbstractDef
   anyAbstract (RecDef i _ _ _ _ _ _) = defAbstract i == AbstractDef
-  anyAbstract (DataSig i _ _ _)      = defAbstract i == AbstractDef
-  anyAbstract (RecSig i _ _ _)       = defAbstract i == AbstractDef
+  anyAbstract (DataSig i _ _ _ _)    = defAbstract i == AbstractDef
+  anyAbstract (RecSig i _ _ _ _)     = defAbstract i == AbstractDef
   anyAbstract _                      = __IMPOSSIBLE__
 
 -- | Turn a name into an expression.

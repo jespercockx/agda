@@ -1003,10 +1003,10 @@ instance ToConcrete A.WhereDeclarations where
     ret . AnyWhere noRange =<< toConcrete d
 
 mergeSigAndDef :: [C.Declaration] -> [C.Declaration]
-mergeSigAndDef (C.RecordSig _ x bs e : C.RecordDef r y dir _ fs : ds)
-  | x == y = C.Record r y dir bs e fs : mergeSigAndDef ds
-mergeSigAndDef (C.DataSig _ x bs e : C.DataDef r y _ cs : ds)
-  | x == y = C.Data r y bs e cs : mergeSigAndDef ds
+mergeSigAndDef (C.RecordSig _ i x bs e : C.RecordDef r y dir _ fs : ds)
+  | x == y = C.Record r i y dir bs e fs : mergeSigAndDef ds
+mergeSigAndDef (C.DataSig _ i x bs e : C.DataDef r y _ cs : ds)
+  | x == y = C.Data r i y bs e cs : mergeSigAndDef ds
 mergeSigAndDef (d : ds) = d : mergeSigAndDef ds
 mergeSigAndDef [] = []
 
@@ -1148,12 +1148,12 @@ instance ToConcrete A.Declaration where
   toConcrete (A.FunDef i _ _ cs) =
     withAbstractPrivate i $ concat <$> toConcrete cs
 
-  toConcrete (A.DataSig i x bs t) =
+  toConcrete (A.DataSig i ai x bs t) =
     withAbstractPrivate i $
     bindToConcrete (A.generalizeTel bs) $ \ tel' -> do
       x' <- unsafeQNameToName <$> toConcrete x
       t' <- toConcreteTop t
-      return [ C.DataSig (getRange i) x' (map C.DomainFull $ catMaybes tel') t' ]
+      return [ C.DataSig (getRange i) ai x' (map C.DomainFull $ catMaybes tel') t' ]
 
   toConcrete (A.DataDef i x uc bs cs) =
     withAbstractPrivate i $
@@ -1161,12 +1161,12 @@ instance ToConcrete A.Declaration where
       (x',cs') <- first unsafeQNameToName <$> toConcrete (x, map Constr cs)
       return [ C.DataDef (getRange i) x' (catMaybes tel') cs' ]
 
-  toConcrete (A.RecSig i x bs t) =
+  toConcrete (A.RecSig i ai x bs t) =
     withAbstractPrivate i $
     bindToConcrete (A.generalizeTel bs) $ \ tel' -> do
       x' <- unsafeQNameToName <$> toConcrete x
       t' <- toConcreteTop t
-      return [ C.RecordSig (getRange i) x' (map C.DomainFull $ catMaybes tel') t' ]
+      return [ C.RecordSig (getRange i) ai x' (map C.DomainFull $ catMaybes tel') t' ]
 
   toConcrete (A.RecDef  i x uc dir bs t cs) =
     withAbstractPrivate i $
