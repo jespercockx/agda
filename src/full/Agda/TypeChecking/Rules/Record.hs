@@ -298,11 +298,16 @@ checkRecDef i name uc (RecordDirectives ind eta0 pat con) (A.DataDefParams gpars
 
       let m = qnameToMName name  -- Name of record module.
 
+      eraseRecordParameters <- optEraseRecordParameters <$> pragmaOptions
+      let maybeErase :: forall a. LensQuantity a => a -> a
+          maybeErase | eraseRecordParameters = setQuantity zeroQuantity
+                     | otherwise             = id
+
       -- Andreas, 2016-02-09 setting all parameters hidden in the record
       -- section telescope changes the semantics, see e.g.
       -- test/Succeed/RecordInParModule.
       -- Ulf, 2016-03-02 but it's the right thing to do (#1759)
-      modifyContextInfo hideOrKeepInstance $ addRecordVar $ do
+      modifyContextInfo (hideOrKeepInstance . maybeErase) $ addRecordVar $ do
 
         -- Add the record section.
 
@@ -321,7 +326,7 @@ checkRecDef i name uc (RecordDirectives ind eta0 pat con) (A.DataDefParams gpars
       -- Andreas, 2016-02-09, Issue 1815 (see also issue 1759).
       -- For checking the record declarations, hide the record parameters
       -- and the parameters of the parent modules.
-      modifyContextInfo hideOrKeepInstance $ addRecordVar $ do
+      modifyContextInfo (hideOrKeepInstance . maybeErase) $ addRecordVar $ do
 
         -- Check the types of the fields and the other record declarations.
         withCurrentModule m $ do
