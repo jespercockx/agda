@@ -1,5 +1,5 @@
 {-# OPTIONS --without-K --safe --no-sized-types --no-guardedness
-            --no-subtyping #-}
+            --no-subtyping --erase-record-parameters #-}
 
 module Agda.Builtin.FromNeg where
 
