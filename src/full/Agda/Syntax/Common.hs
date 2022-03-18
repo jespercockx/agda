@@ -7,7 +7,7 @@ module Agda.Syntax.Common where
 import Prelude hiding (null)
 
 import Control.DeepSeq
-import Control.Arrow ((&&&))
+import Control.Arrow ((&&&), ArrowZero (zeroArrow))
 import Control.Applicative ((<|>), liftA2)
 
 #if __GLASGOW_HASKELL__ < 804
@@ -389,7 +389,9 @@ sameHiding x y =
 ---------------------------------------------------------------------------
 
 -- | Type wrapper to indicate additive monoid/semigroup context.
-newtype UnderAddition t = UnderAddition t deriving (Show, Functor, Eq, Ord, PartialOrd)
+newtype UnderAddition t =
+  UnderAddition { underAddition :: t }
+  deriving (Show, Functor, Eq, Ord, PartialOrd)
 
 instance Applicative UnderAddition where
   pure = UnderAddition
@@ -514,6 +516,12 @@ topModality = Modality topRelevance topQuantity topCohesion
 --   composition, because the default quantity is ω.
 defaultModality :: Modality
 defaultModality = Modality defaultRelevance defaultQuantity defaultCohesion
+
+irrelevantModality :: Modality
+irrelevantModality = setRelevance Irrelevant defaultModality
+
+erasedModality :: Modality
+erasedModality = setQuantity zeroQuantity defaultModality
 
 -- | Equality ignoring origin.
 

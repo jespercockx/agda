@@ -1,5 +1,4 @@
-Failed to solve the following constraints:
-  i = _x.b.1_40 : I (blocked on _x.b.1_40)
-  _x.b.1_40 = i : I (blocked on _x.b.1_40)
-Unsolved metas at the following locations:
-  Issue5058.agda:26,9-10
+Issue5058.agda:26,9-10
+Cannot instantiate the metavariable _x.b.1_40 to solution i
+since (part of) the solution was created in an erased context
+when checking that the expression p has type P (d x)

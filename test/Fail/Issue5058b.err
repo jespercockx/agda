@@ -1,4 +1,5 @@
-Failed to solve the following constraints:
-  x = _q.B.1_20 : A (blocked on _q.B.1_20)
-Unsolved metas at the following locations:
-  Issue5058b.agda:16,8-9
+Issue5058b.agda:16,8-9
+Cannot instantiate the metavariable _q.B.1_20 to solution x
+since (part of) the solution was created in an erased context
+when checking that the expression F has type
+(p : P x) → Q p q → Set

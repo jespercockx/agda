@@ -58,6 +58,7 @@ import Agda.Utils.Pretty (prettyShow)
 import Agda.Utils.Size
 
 import Agda.Utils.Impossible
+import Agda.TypeChecking.Irrelevance (isPropM, isIrrelevantOrPropM)
 
 ---------------------------------------------------------------------------
 -- * MetaOccursCheck: going into definitions to exclude cyclic solutions
@@ -195,7 +196,7 @@ definitionCheck d = do
         , "has relevance"
         , text . show $ getRelevance dmod
         ]
-      abort neverUnblock $ MetaIrrelevantSolution m $ Def d []
+      strongly $ abort neverUnblock $ MetaIrrelevantSolution m $ Def d []
     unless (er || usableQuantity dmod) $ do
       reportSDoc "tc.meta.occurs" 35 $ hsep
         [ "occursCheck: definition"
@@ -203,7 +204,7 @@ definitionCheck d = do
         , "has quantity"
         , text . show $ getQuantity dmod
         ]
-      abort neverUnblock $ MetaErasedSolution m $ Def d []
+      strongly $ abort neverUnblock $ MetaErasedSolution m $ Def d []
 
 metaCheck :: MetaId -> OccursM MetaId
 metaCheck m = do
@@ -454,52 +455,57 @@ occursCheck m xs v cmpAs = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
 
 instance Occurs Term where
   occurs v ty = do
-    vb  <- unfoldB v
-    singTy <- runBlocked $ isSingletonType ty
-    let tyBlock = fromLeft (const neverUnblock) singTy
-        block = unblockOnEither (getBlocker vb) tyBlock
-        -- On a failure, we should retry when any meta that is blocking
-        -- either the term or the type is solved.
-        flexIfBlocked = if
-          -- In the metavariable case we should not yet become flexible
-          -- because otherwise pruning won't fire.
-          | MetaV{} <- ignoreBlocking vb -> addOrUnblocker block
-          | block /= neverUnblock -> flexibly . addOrUnblocker block
-          -- Re #3594, do not fail hard when Underapplied:
-          -- the occurrence could be computed away after eta expansion.
-          | NotBlocked{blockingStatus = Underapplied} <- vb -> flexibly
-          | otherwise -> id
-    v <- reduceProjectionLike $ ignoreBlocking vb
-    ifJust (fromRight (const Nothing) singTy) return $ do
-    flexIfBlocked $ do
-        ctx <- ask
-        let m = occMeta . feExtra $ ctx
-        reportSDoc "tc.meta.occurs" 45 $
-          text ("occursCheck " ++ prettyShow m ++ " (" ++ show (feFlexRig ctx) ++ ") of ") <+> prettyTCM v <+> ":" <+> prettyTCM ty
-        reportSDoc "tc.meta.occurs" 70 $
-          nest 2 $ pretty v
+    ctx <- ask
+    let m = occMeta . feExtra $ ctx
+    reportSDoc "tc.meta.occurs" 45 $
+      text ("occursCheck " ++ prettyShow m ++ " (" ++ show (feFlexRig ctx) ++ ") of ") <+> prettyTCM v <+> ":" <+> prettyTCM ty
+    reportSDoc "tc.meta.occurs" 70 $
+      nest 2 $ pretty v
+    let etaExpandSingleton cont = do
+          erasedTy <- runBlocked $ isFullyErasedType ty
+          case erasedTy of
+            -- Case: proper singleton type with inhabitant @w@
+            Right (Just (Left w)) -> return w
+            -- Case: singleton type if we ignore fields of modality @mod@
+            -- Here we can continue under this stronger modality, but we need
+            -- to eta-expand the result.
+            Right (Just (Right (expand , mod))) | not (mod `moreUsableModality` getModality ctx) -> do
+              reportSDoc "tc.meta.occurs" 25 $ "eta-expanding fully erased type" <+> prettyTCM ty
+              reportSDoc "tc.meta.occurs" 25 $ "type modality: " <+> prettyTCM mod
+              reportSDoc "tc.meta.occurs" 25 $ "context modality: " <+> prettyTCM (getModality ctx)
+              reportSDoc "tc.meta.occurs" 25 $ "eta-expansion:" <+> prettyTCM (expand v)
+              expand <$> underModality mod cont
+            -- Case: not a singleton type or eta-expansion not needed
+            Right _ -> cont
+            -- Case: blocked type
+            Left tyBlock -> addOrUnblocker tyBlock $ flexibly cont
+    etaExpandSingleton $ do
+      vb <- unfoldB v
+      v <- reduceProjectionLike $ ignoreBlocking vb
+      -- On a failure, we should retry when any blocking meta is solved.
+      let flexIfBlocked = case vb of
+            -- In the metavariable case we should not yet become flexible
+            -- because otherwise pruning won't fire.
+            Blocked b MetaV{} -> addOrUnblocker b
+            Blocked b _       -> flexibly . addOrUnblocker b
+            -- Re #3594, do not fail hard when Underapplied:
+            -- the occurrence could be computed away after eta expansion.
+            NotBlocked{blockingStatus = Underapplied} -> flexibly
+            _ -> id
+      flexIfBlocked $ do
         case v of
-          Var i es   -> do
+          Var i es -> do
             allowed <- getAll . ($ unitModality) <$> variable i
             a <- typeOfBV i
             if allowed then Var i <$> weakly (occurs es (a, Var i)) else do
-              -- if the offending variable is of singleton type,
-              -- eta-expand it away
               reportSDoc "tc.meta.occurs" 35 $ "offending variable: " <+> prettyTCM (var i)
-              t <-  typeOfBV i
-              reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "of type " <+> prettyTCM t
-              isST <- isSingletonType t
-              reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "(after singleton test)"
-              case isST of
-                -- not a singleton type
-                Nothing ->
-                  -- #4480: Only hard fail if the variable is not in scope. Wrong modality/relevance
-                  -- could potentially be salvaged by eta expansion.
-                  ifM (($ i) <$> allowedVars) -- vv TODO: neverUnblock is not correct! What could trigger this eta expansion though?
-                      (patternViolation' neverUnblock 70 $ "Disallowed var " ++ show i ++ " due to modality/relevance")
-                      (strongly $ abort neverUnblock $ MetaCannotDependOn m i)
-                -- is a singleton type with unique inhabitant sv
-                (Just sv) -> return $ sv `applyE` es
+              let erasedModality = setQuantity zeroQuantity unitModality
+                  irrelevantErasedModality = setRelevance Irrelevant erasedModality
+              erasedOk <- getAll . ($ erasedModality) <$> variable i
+              when erasedOk $ strongly $ abort neverUnblock $ MetaErasedSolution m $ var i
+              irrelevantOk <- getAll . ($ irrelevantErasedModality) <$> variable i
+              when irrelevantOk $ strongly $ abort neverUnblock $ MetaIrrelevantSolution m $ var i
+              strongly $ abort neverUnblock $ MetaCannotDependOn m i
           Lam h f     -> do
             ab <- shouldBePiOrPath ty
             Lam h <$> occurs f ab
@@ -508,8 +514,8 @@ instance Occurs Term where
           Dummy{}     -> return v
           DontCare v  -> dontCare <$> do underRelevance Irrelevant $ occurs v ty
           Def d es    -> do
-            definitionCheck d
-            Def d <$> occDef d es
+              definitionCheck d
+              Def d <$> occDef d es
           Con c ci vs -> do
             definitionCheck (conName c)
             reportSDoc "tc.meta.occurs" 45 $ "occursCheck: constructor at type" <+> prettyTCM ty
@@ -724,8 +730,10 @@ instance Occurs (Abs Type) where
   metaOccurs m (Abs   _ x) = metaOccurs m x
   metaOccurs m (NoAbs _ x) = metaOccurs m x
 
-instance Occurs a => Occurs (Arg a) where
-  occurs (Arg info v) t = Arg info <$> do underModality info $ occurs v (unDom t)
+instance Occurs (Arg Term) where
+  occurs (Arg info v) t = do
+    info' <- ifM (isPropM t) (pure $ setRelevance Irrelevant info) (pure info)
+    Arg info <$> do underModality info' $ occurs v (unDom t)
   metaOccurs m = metaOccurs m . unArg
 
 instance Occurs a => Occurs (Dom a) where

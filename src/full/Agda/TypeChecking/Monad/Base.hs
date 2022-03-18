@@ -22,7 +22,7 @@ import Control.Monad.Fix
 import Control.Monad.IO.Class       ( MonadIO(..) )
 import Control.Monad.State          ( MonadState(..), modify, StateT(..), runStateT )
 import Control.Monad.Reader         ( MonadReader(..), ReaderT(..), runReaderT )
-import Control.Monad.Writer         ( WriterT )
+import Control.Monad.Writer         ( WriterT(..), runWriterT )
 import Control.Monad.Trans          ( MonadTrans(..), lift )
 import Control.Monad.Trans.Control  ( MonadTransControl(..), liftThrough )
 import Control.Monad.Trans.Identity ( IdentityT(..), runIdentityT )
@@ -4909,9 +4909,15 @@ runBlocked = runExceptT . unBlockT
 instance MonadBlock m => MonadBlock (MaybeT m) where
   catchPatternErr h m = MaybeT $ catchPatternErr (runMaybeT . h) $ runMaybeT m
 
+instance MonadBlock m => MonadBlock (ExceptT e m) where
+  catchPatternErr h m = ExceptT $ catchPatternErr (runExceptT . h) $ runExceptT m
+
 instance MonadBlock m => MonadBlock (ReaderT e m) where
   catchPatternErr h m = ReaderT $ \ e ->
     let run = flip runReaderT e in catchPatternErr (run . h) (run m)
+
+instance (Monoid w, MonadBlock m) => MonadBlock (WriterT w m) where
+  catchPatternErr h m = WriterT $ catchPatternErr (runWriterT . h) $ runWriterT m
 
 ---------------------------------------------------------------------------
 -- * Type checking monad transformer
