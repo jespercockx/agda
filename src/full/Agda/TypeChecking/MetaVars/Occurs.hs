@@ -41,6 +41,7 @@ import Agda.TypeChecking.Free
 import Agda.TypeChecking.Free.Lazy
 import Agda.TypeChecking.Free.Reduce
 import Agda.TypeChecking.Substitute
+import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Datatypes
 import Agda.TypeChecking.Records
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars
@@ -466,32 +467,21 @@ instance Occurs Term where
         reportSDoc "tc.meta.occurs" 70 $
           nest 2 $ pretty v
         case v of
-          Var i es   -> do
+          Var i es   -> etaExpandSingleton v $ do
             allowed <- getAll . ($ unitModality) <$> variable i
-            if allowed then Var i <$> weakly (occurs es) else do
-              -- if the offending variable is of singleton type,
-              -- eta-expand it away
-              reportSDoc "tc.meta.occurs" 35 $ "offending variable: " <+> prettyTCM (var i)
-              t <-  typeOfBV i
-              reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "of type " <+> prettyTCM t
-              isST <- isSingletonType t
-              reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "(after singleton test)"
-              case isST of
-                -- not a singleton type
-                Nothing ->
+            if | allowed   -> Var i <$> weakly (occurs es)
+               | otherwise -> do
                   -- #4480: Only hard fail if the variable is not in scope. Wrong modality/relevance
                   -- could potentially be salvaged by eta expansion.
                   ifM (($ i) <$> allowedVars) -- vv TODO: neverUnblock is not correct! What could trigger this eta expansion though?
                       (patternViolation' neverUnblock 70 $ "Disallowed var " ++ show i ++ " due to modality/relevance")
                       (strongly $ abort neverUnblock $ MetaCannotDependOn m i)
-                -- is a singleton type with unique inhabitant sv
-                (Just sv) -> return $ sv `applyE` es
           Lam h f     -> Lam h <$> occurs f
           Level l     -> Level <$> occurs l
           Lit l       -> return v
           Dummy{}     -> return v
           DontCare v  -> dontCare <$> do underRelevance Irrelevant $ occurs v
-          Def d es    -> do
+          Def d es    -> etaExpandSingleton v $ do
             definitionCheck d
             Def d <$> occDef d es
           Con c ci vs -> do
@@ -499,7 +489,7 @@ instance Occurs Term where
             Con c ci <$> conArgs vs (occurs vs)  -- if strongly rigid, remain so, except with unreduced IApply arguments.
           Pi a b      -> uncurry Pi <$> occurs (a,b)
           Sort s      -> Sort <$> do underRelevance NonStrict $ occurs s
-          MetaV m' es -> do
+          MetaV m' es -> etaExpandSingleton v $ do
             m' <- metaCheck m'
 
             addOrUnblocker (unblockOnMeta m') $ do
@@ -537,6 +527,21 @@ instance Occurs Term where
                 {-then-} (occurs vs)
                 {-else-} (defArgs $ occurs vs)
 
+            -- Jesper, 2022-03-18, Issue #5837: If the type is a
+            -- singleton type, we can eta-expand it away.
+            etaExpandSingleton :: Term -> OccursM Term -> OccursM Term
+            etaExpandSingleton v cont = do
+              isSing <- catchPatternErr (\b -> return $ Left b) $ do
+                t <- inferTerm v
+                Right <$> isSingletonType t
+              case isSing of
+                -- Definitely a singleton type
+                Right (Just v') -> occurs v'
+                -- Definitely not a singleton type
+                Right Nothing -> cont
+                -- Eta-expansion blocked
+                Left b -> addOrUnblocker b cont
+
   metaOccurs m v = do
     v <- instantiate v
     case v of
@@ -552,6 +557,69 @@ instance Occurs Term where
       Sort s     -> metaOccurs m s              -- vv m is already an unblocker
       MetaV m' vs | m == m'   -> patternViolation' neverUnblock 50 $ "Found occurrence of " ++ prettyShow m
                   | otherwise -> addOrUnblocker (unblockOnMeta m') $ metaOccurs m vs
+
+-- | A version of @infer@ from CheckInternal that does not re-check
+--   the @Elim@s and instead assumes the term is type-correct. TODO:
+--   put this in a better place.
+inferTerm :: Term -> OccursM Type
+inferTerm = \case
+    Var i es   -> do
+      a <- typeOfBV i
+      snd <$> inferSpine a (Var i   []) es
+    Def f (Apply a : es) -> inferDef' f a es -- possibly proj.like
+    Def f es             -> inferDef  f   es -- not a projection-like fun
+    MetaV x es -> do -- we assume meta instantiations to be well-typed
+      a <- metaType x
+      snd <$> inferSpine a (MetaV x []) es
+    v -> __IMPOSSIBLE_VERBOSE__ $ unlines
+      [ "CheckInternal.infer: non-inferable term:"
+      , "  " ++ prettyShow v
+      ]
+  where
+    inferDef :: QName -> Elims -> OccursM Type
+    inferDef f es = do
+      a <- defType <$> getConstInfo f
+      snd <$> inferSpine a (Def f []) es
+
+    inferDef' :: QName -> Arg Term -> Elims -> OccursM Type
+    inferDef' f a es = do
+      isRelevantProjection f >>= \case
+        Just Projection{ projIndex = n } | n > 0 -> do
+          let self = unArg a
+          b <- inferTerm self
+          snd <$> inferSpine b self (Proj ProjSystem f : es)
+        _ -> inferDef f (Apply a : es)
+
+    inferSpine :: Type -> Term -> Elims -> OccursM (Term, Type)
+    inferSpine t self [] = return (self, t)
+    inferSpine t self (e : es) = case e of
+      IApply x y r -> do
+        (a, b) <- shouldBePath t
+        izero <- primIZero
+        ione  <- primIOne
+        inferSpine (b `absApp` r) (self `applyE` [e]) es
+      Apply (Arg ai v) -> do
+        (a, b) <- shouldBePi t
+        inferSpine (b `absApp` v) (self `applyE` [e]) es
+      Proj o f -> do
+        (a, b) <- shouldBePi =<< shouldBeProjectible t f
+        u  <- applyDef o f (argFromDom a $> self)
+        inferSpine (b `absApp` self) u es
+
+    shouldBeProjectible :: Type -> QName -> OccursM Type
+    shouldBeProjectible t f = do
+        t <- reduce t
+        maybe __IMPOSSIBLE__ return =<< getDefType f t
+
+    shouldBePath :: Type -> OccursM (Dom Type, Abs Type)
+    shouldBePath t = do
+      t <- reduce t
+      fromMaybeM __IMPOSSIBLE__ $ isPath t
+
+    shouldBePi :: Type -> OccursM (Dom Type, Abs Type)
+    shouldBePi t = reduce t >>= \ case
+      El _ (Pi a b) -> return (a, b)
+      _             -> __IMPOSSIBLE__
 
 instance Occurs QName where
   occurs d = __IMPOSSIBLE__
