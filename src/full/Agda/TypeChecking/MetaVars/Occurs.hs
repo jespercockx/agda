@@ -33,6 +33,7 @@ import Agda.Syntax.Internal
 import Agda.Syntax.Internal.MetaVars
 
 import Agda.TypeChecking.Constraints () -- instances
+import Agda.TypeChecking.Level (levelType)
 import Agda.TypeChecking.Monad
 import qualified Agda.TypeChecking.Monad.Benchmark as Bench
 import Agda.TypeChecking.Reduce
@@ -43,10 +44,12 @@ import Agda.TypeChecking.Free.Reduce
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Datatypes
 import Agda.TypeChecking.Records
+import Agda.TypeChecking.Telescope
+import Agda.TypeChecking.ProjectionLike
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars
 
 import Agda.Utils.Either
-import Agda.Utils.Lens
+import Agda.Utils.Lens hiding ((<&>))
 import Agda.Utils.List (downFrom)
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
@@ -352,21 +355,20 @@ abort unblock err = do
 
 -- | Extended occurs check.
 class Occurs t where
-  occurs :: t -> OccursM t
+  type OccType t
+  occurs :: OccType t -> t -> OccursM t
   metaOccurs :: MetaId -> t -> TCM ()  -- raise exception if meta occurs in t
-
-  default occurs :: (Traversable f, Occurs a, f a ~ t) => t -> OccursM t
-  occurs = traverse occurs
 
   default metaOccurs :: (Foldable f, Occurs a, f a ~ t) => MetaId -> t -> TCM ()
   metaOccurs = traverse_ . metaOccurs
 
+occurs_ :: (Occurs t, OccType t ~ ()) => t -> OccursM t
+occurs_ = occurs ()
+
 -- | When assigning @m xs := v@, check that @m@ does not occur in @v@
 --   and that the free variables of @v@ are contained in @xs@.
-occursCheck
-  :: (Occurs a, InstantiateFull a, PrettyTCM a)
-  => MetaId -> VarMap -> a -> TCM a
-occursCheck m xs v = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
+occursCheck :: MetaId -> VarMap -> Term -> CompareAs -> TCM Term
+occursCheck m xs v target = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
   mv <- lookupLocalMeta m
   n  <- getContextSize
   reportSLn "tc.meta.occurs" 35 $ "occursCheck " ++ show m ++ " " ++ show xs
@@ -381,17 +383,21 @@ occursCheck m xs v = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
         , feModality  = getModality mv
         , feSingleton = variableCheck xs
         }
+  a <- case target of
+         AsTypes{}   -> return $ sort __DUMMY_SORT__
+         AsTermsOf a -> return a
+         AsSizes{}   -> sizeType
   initOccursCheck mv
   nicerErrorMessage $ do
     -- First try without normalising the term
-    (occurs v `runReaderT` initEnv NoUnfold) `catchError` \err -> do
+    (occurs a v `runReaderT` initEnv NoUnfold) `catchError` \err -> do
       -- If first run is inconclusive, try again with normalization
       -- (unless metavariable is irrelevant, in which case the
       -- constraint will anyway be dropped)
       case err of
         PatternErr{} | not (isIrrelevant $ getModality mv) -> do
           initOccursCheck mv
-          occurs v `runReaderT` initEnv YesUnfold
+          occurs a v `runReaderT` initEnv YesUnfold
         _ -> throwError err
 
   where
@@ -446,7 +452,8 @@ occursCheck m xs v = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
       _ -> throwError err
 
 instance Occurs Term where
-  occurs v = do
+  type OccType Term = Type
+  occurs a v = do
     vb  <- unfoldB v
     -- occurs' ctx $ ignoreBlocking v  -- fails test/succeed/DontPruneBlocked
     let flexIfBlocked = case vb of
@@ -462,17 +469,17 @@ instance Occurs Term where
         ctx <- ask
         let m = occMeta . feExtra $ ctx
         reportSDoc "tc.meta.occurs" 45 $
-          text ("occursCheck " ++ prettyShow m ++ " (" ++ show (feFlexRig ctx) ++ ") of ") <+> prettyTCM v
+          text ("occursCheck " ++ prettyShow m ++ " (" ++ show (feFlexRig ctx) ++ ") of ") <+> prettyTCM v <+> text ":" <+> prettyTCM a
         reportSDoc "tc.meta.occurs" 70 $
-          nest 2 $ pretty v
+          nest 2 $ pretty v <+> text ":" <+> pretty a
         case v of
           Var i es   -> do
+            t <- typeOfBV i
             allowed <- getAll . ($ unitModality) <$> variable i
-            if allowed then Var i <$> weakly (occurs es) else do
+            if allowed then Var i <$> weakly (occurs (t , Var i) es) else do
               -- if the offending variable is of singleton type,
               -- eta-expand it away
               reportSDoc "tc.meta.occurs" 35 $ "offending variable: " <+> prettyTCM (var i)
-              t <-  typeOfBV i
               reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "of type " <+> prettyTCM t
               isST <- isSingletonType t
               reportSDoc "tc.meta.occurs" 35 $ nest 2 $ "(after singleton test)"
@@ -486,27 +493,32 @@ instance Occurs Term where
                       (strongly $ abort neverUnblock $ MetaCannotDependOn m i)
                 -- is a singleton type with unique inhabitant sv
                 (Just sv) -> return $ sv `applyE` es
-          Lam h f     -> Lam h <$> occurs f
-          Level l     -> Level <$> occurs l
+          Lam h f     -> do
+            ~(Pi b c) <- unEl <$> abortIfBlocked a
+            Lam h <$> occurs (b,c) f
+          Level l     -> Level <$> occurs_ l
           Lit l       -> return v
           Dummy{}     -> return v
-          DontCare v  -> dontCare <$> do underRelevance Irrelevant $ occurs v
+          DontCare v  -> dontCare <$> do underRelevance Irrelevant $ occurs a v
           Def d es    -> do
             definitionCheck d
             Def d <$> occDef d es
           Con c ci vs -> do
             definitionCheck (conName c)
-            Con c ci <$> conArgs vs (occurs vs)  -- if strongly rigid, remain so, except with unreduced IApply arguments.
-          Pi a b      -> uncurry Pi <$> occurs (a,b)
-          Sort s      -> Sort <$> do underRelevance NonStrict $ occurs s
+            ca <- snd . fromMaybe __IMPOSSIBLE__ <$> do
+              getConType c =<< abortIfBlocked a
+            Con c ci <$> conArgs vs (occurs (ca , Con c ci) vs)  -- if strongly rigid, remain so, except with unreduced IApply arguments.
+          Pi a b      -> Pi <$> occurs_ a <*> occurs a b
+          Sort s      -> Sort <$> do underRelevance NonStrict $ occurs_ s
           MetaV m' es -> do
             m' <- metaCheck m'
-
+            -- v Don't use getMetaType here since it might be a sort meta
+            ma <- jMetaType <$> lookupMetaJudgement m'
             addOrUnblocker (unblockOnMeta m') $ do
                          -- If getting stuck here, we need to trigger wakeup if this meta is
                          -- solved.
               -- The arguments of a meta are in a flexible position
-              (MetaV m' <$> do flexibly $ occurs es) `catchError` \ err -> do
+              (MetaV m' <$> do flexibly $ occurs (ma , MetaV m) es) `catchError` \ err -> do
                 ctx <- ask
                 reportSDoc "tc.meta.kill" 25 $ vcat
                   [ text $ "error during flexible occurs check, we are " ++ show (ctx ^. lensFlexRig)
@@ -524,18 +536,30 @@ instance Occurs Term where
                       killResult <- lift . prune m' vs =<< allowedVars
                       if (killResult == PrunedEverything)
                         -- after successful pruning, restart occurs check
-                        then occurs =<< instantiate (MetaV m' es)
+                        then occurs a =<< instantiate (MetaV m' es)
                         else throwError err
                   _ -> throwError err
           where
             -- a data or record type constructor propagates strong occurrences
             -- since e.g. x = List x is unsolvable
+            occDef :: QName -> Elims -> OccursM Elims
             occDef d vs = do
-              m   <- asks (occMeta . feExtra)
+              m  <- asks (occMeta . feExtra)
               lift $ metaOccurs m d
+              hd <- isRelevantProjection d >>= \case
+                Just proj -> do
+                  let d' = projOrig proj
+                      r  = unArg $ projFromType proj
+                  rtype <- defType <$> getConstInfo r
+                  dtype <- defType <$> getConstInfo d'
+                  TelV ptel _ <- telView rtype
+                  n <- getContextSize
+                  let pars = raise (n - size ptel) $ teleArgs ptel :: Args
+                  (,Def d') <$> (dtype `piApplyM` pars)
+                Nothing -> (,Def d) . defType <$> getConstInfo d
               ifM (liftTCM $ isJust <$> isDataOrRecordType d)
-                {-then-} (occurs vs)
-                {-else-} (defArgs $ occurs vs)
+                {-then-} (occurs hd vs)
+                {-else-} (defArgs $ occurs hd vs)
 
   metaOccurs m v = do
     v <- instantiate v
@@ -554,7 +578,8 @@ instance Occurs Term where
                   | otherwise -> addOrUnblocker (unblockOnMeta m') $ metaOccurs m vs
 
 instance Occurs QName where
-  occurs d = __IMPOSSIBLE__
+  type OccType QName = ()
+  occurs _ d = __IMPOSSIBLE__
 
   metaOccurs m d = whenM (defNeedsChecking d) $ do
     tallyDef d
@@ -569,11 +594,12 @@ metaOccursQName m x = metaOccurs m . theDef =<< do
   -- constructors are also called up.
 
 instance Occurs Defn where
-  occurs def = __IMPOSSIBLE__
+  type OccType Defn = ()
+  occurs _ def = __IMPOSSIBLE__
 
   metaOccurs m Axiom{}                      = return ()
   metaOccurs m DataOrRecSig{}               = return ()
-  metaOccurs m Function{ funClauses = cls } = metaOccurs m cls
+  metaOccurs m Function{ funClauses = cls } = mapM_ (metaOccurs m) cls
   -- since a datatype is isomorphic to the sum of its constructor types
   -- we check the constructor types
   metaOccurs m Datatype{ dataCons = cs }    = mapM_ (metaOccursQName m) cs
@@ -585,58 +611,65 @@ instance Occurs Defn where
   metaOccurs m GeneralizableVar{}           = __IMPOSSIBLE__
 
 instance Occurs Clause where
-  occurs cl = __IMPOSSIBLE__
+  type OccType Clause = ()
+  occurs _ cl = __IMPOSSIBLE__
 
   metaOccurs m = metaOccurs m . clauseBody
 
 instance Occurs Level where
-  occurs (Max n as) = Max n <$> occurs as
+  type OccType Level = ()
+  occurs _ (Max n as) = Max n <$> traverse occurs_ as
 
-  metaOccurs m (Max _ as) = addOrUnblocker (unblockOnAnyMetaIn as) $ metaOccurs m as
+  metaOccurs m (Max _ as) = addOrUnblocker (unblockOnAnyMetaIn as) $ mapM_ (metaOccurs m) as
                             -- TODO: Should only be blocking metas in as. But any meta that can
                             --       let the Max make progress needs to be included. For instance,
                             --       _1 ⊔ _2 = _1 should unblock on _2, even though _1 is the meta
                             --       failing occurs check.
 
 instance Occurs PlusLevel where
-  occurs (Plus n l) = Plus n <$> occurs l
+  type OccType PlusLevel = ()
+  occurs _ (Plus n l) = do
+    la <- levelType
+    Plus n <$> occurs la l
 
   metaOccurs m (Plus n l) = metaOccurs m l
 
 instance Occurs Type where
-  occurs (El s v) = uncurry El <$> occurs (s,v)
+  type OccType Type = ()
+  occurs _ (El s v) = El <$> occurs_ s <*> occurs (sort s) v
 
   metaOccurs m (El s v) = metaOccurs m (s,v)
 
 instance Occurs Sort where
-  occurs s = do
+  type OccType Sort = ()
+  occurs _ s = do
     unfold s >>= \case
       PiSort a s1 s2 -> do
-        s1' <- flexibly $ occurs s1
-        a'  <- (a $>) <$> do flexibly $ occurs $ unDom a
-        s2' <- mapAbstraction (El s1' <$> a') (flexibly . underBinder . occurs) s2
+        s1' <- flexibly $ occurs_ s1
+        a'  <- (a $>) <$> do flexibly $ occurs (sort s1') $ unDom a
+        s2' <- mapAbstraction (El s1' <$> a') (flexibly . underBinder . occurs_) s2
         return $ PiSort a' s1' s2'
-      FunSort s1 s2 -> FunSort <$> flexibly (occurs s1) <*> flexibly (occurs s2)
-      Type a     -> Type <$> occurs a
-      Prop a     -> Prop <$> occurs a
+      FunSort s1 s2 -> FunSort <$> flexibly (occurs_ s1) <*> flexibly (occurs_ s2)
+      Type a     -> Type <$> occurs_ a
+      Prop a     -> Prop <$> occurs_ a
       s@Inf{}    -> return s
-      SSet a     -> SSet <$> occurs a
+      SSet a     -> SSet <$> occurs_ a
       s@SizeUniv -> return s
       s@LockUniv -> return s
       s@IntervalUniv -> return s
-      UnivSort s -> UnivSort <$> do flexibly $ occurs s
+      UnivSort s -> UnivSort <$> do flexibly $ occurs_ s
       MetaS x es -> do
-        MetaV x es <- occurs (MetaV x es)
+        MetaV x es <- occurs (sort $ univSort s) (MetaV x es)
         return $ MetaS x es
       DefS x es -> do
-        Def x es <- occurs (Def x es)
+        Def x es <- occurs (sort $ univSort s) (Def x es)
         return $ DefS x es
       DummyS{}   -> return s
 
   metaOccurs m s = do
     s <- instantiate s
     case s of
-      PiSort a s1 s2 -> metaOccurs m (a,s1,s2)
+      PiSort a s1 s2 -> metaOccurs m (a,s1,unAbs s2)
       FunSort s1 s2 -> metaOccurs m (s1,s2)
       Type a     -> metaOccurs m a
       Prop a     -> metaOccurs m a
@@ -650,37 +683,75 @@ instance Occurs Sort where
       DefS d es  -> metaOccurs m $ Def d es
       DummyS{}   -> return ()
 
-instance Occurs a => Occurs (Elim' a) where
-  occurs e@(Proj _ f)   = e <$ definitionCheck f
-  occurs (Apply a)      = Apply  <$> occurs a
-  occurs (IApply x y a) = IApply <$> occurs x <*> occurs y <*> occurs a
+instance Occurs Elims where
+  type OccType Elims = (Type , Elims -> Term)
+  occurs (a,hd) [] = return []
+  occurs (a,hd) (e:es) = case e of
+    (Proj o f)     -> do
+      definitionCheck f
+      ~(Just (El _ (Pi b c))) <- getDefType f =<< abortIfBlocked a
+      let a' = c `absApp` hd []
+      hd' <- applyE <$> applyDef o f (argFromDom b $> hd [])
+      (e:) <$> occurs (a',hd') es
+    (Apply v) -> do
+      ~(Pi b c) <- unEl <$> abortIfBlocked a
+      e <- Apply <$> occurs b v
+      let a'  = c `absApp` unArg v
+          hd' = hd . (e:)
+      (e:) <$> occurs (a',hd') es
+    (IApply x y v) -> do
+      ~(Just (b,c)) <- isPath =<< abortIfBlocked a
+      ax <- absApp c <$> primIZero
+      ay <- absApp c <$> primIOne
+      e  <- IApply <$> occurs ax x <*> occurs ay y <*> occurs (unDom b) v
+      let a'  = c `absApp` v
+          hd' = hd . (e:)
+      (e:) <$> occurs (a',hd') es
 
-  metaOccurs m (Proj{} ) = return ()
-  metaOccurs m (Apply a) = metaOccurs m a
-  metaOccurs m (IApply x y a) = metaOccurs m (x,(y,a))
+  metaOccurs m es = forM_ es $ \case
+    Proj{}         -> return ()
+    (Apply a)      -> metaOccurs m a
+    (IApply x y a) -> metaOccurs m (x,(y,a))
 
-instance (Occurs a, Subst a) => Occurs (Abs a) where
-  occurs b@(Abs s _) = Abs   s <$> do underAbstraction_ b $ underBinder . occurs
-  occurs (NoAbs s x) = NoAbs s <$> occurs x
+instance Occurs (Abs Type) where
+  type OccType (Abs Type) = Dom Type
+  occurs dom b@(Abs s _) = Abs   s <$> do underAbstraction dom b $ underBinder . occurs_
+  occurs _   (NoAbs s x) = NoAbs s <$> occurs_ x
+
+  metaOccurs m (Abs   _ x) = metaOccurs m x
+  metaOccurs m (NoAbs _ x) = metaOccurs m x
+
+instance Occurs (Abs Term) where
+  type OccType (Abs Term) = (Dom Type , Abs Type)
+  occurs (_  ,NoAbs _ a) (NoAbs s x) = NoAbs s <$> occurs a x
+  occurs (dom,a        ) b           =
+    Abs (absName b) <$> do underAbstraction dom b $ underBinder . occurs (absBody a)
 
   metaOccurs m (Abs   _ x) = metaOccurs m x
   metaOccurs m (NoAbs _ x) = metaOccurs m x
 
 instance Occurs a => Occurs (Arg a) where
-  occurs (Arg info v) = Arg info <$> do underModality info $ occurs v
+  type OccType (Arg a) = Dom (OccType a)
+  occurs a (Arg info v) = Arg info <$> do underModality info $ occurs (unDom a) v
   metaOccurs m = metaOccurs m . unArg
 
 instance Occurs a => Occurs (Dom a) where
-instance Occurs a => Occurs [a] where
+  type OccType (Dom a) = OccType a
+  occurs a = traverse $ occurs a
+
 instance Occurs a => Occurs (Maybe a) where
+  type OccType (Maybe a) = OccType a
+  occurs a = traverse $ occurs a
 
 instance (Occurs a, Occurs b) => Occurs (a,b) where
-  occurs (x,y) = (,) <$> occurs x <*> occurs y
+  type OccType (a,b) = (OccType a, OccType b)
+  occurs (a,b) (x,y) = (,) <$> occurs a x <*> occurs b y
 
   metaOccurs m (x,y) = metaOccurs m x >> metaOccurs m y
 
 instance (Occurs a, Occurs b, Occurs c) => Occurs (a,b,c) where
-  occurs (x,y,z) = (,,) <$> occurs x <*> occurs y <*> occurs z
+  type OccType (a,b,c) = (OccType a, OccType b, OccType c)
+  occurs (a,b,c) (x,y,z) = (,,) <$> occurs a x <*> occurs b y <*> occurs c z
 
   metaOccurs m (x,y,z) = metaOccurs m x >> metaOccurs m y >> metaOccurs m z
 
