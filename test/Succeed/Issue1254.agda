@@ -2,6 +2,7 @@
 -- {-# OPTIONS -v tc.meta.assign:10 -v tc.constr.findInScope:10 #-}
 -- {-# OPTIONS -v tc.constr.findInScope:49 #-}
 -- {-# OPTIONS --show-implicit #-}
+{-# OPTIONS -v tc.meta:100 #-}
 module Issue1254 where
 
 open import Agda.Primitive

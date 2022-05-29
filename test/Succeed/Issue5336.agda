@@ -1,6 +1,6 @@
 -- Andreas, 2021-04-28, issue #5336
 -- data...where is already extensible.
-
+{-# OPTIONS -v tc.meta:100 -v tc.getConType:100 #-}
 module _ where
 
 module C where

@@ -1,0 +1,6 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 154
+out > An internal error has occurred. Please report this as a bug.
+out > Location of the error: __IMPOSSIBLE__, called at src/full/Agda/TypeChecking/MetaVars/Occurs.hs:«line»:«col» in «Agda-package»:Agda.TypeChecking.MetaVars.Occurs
+out >

@@ -501,7 +501,9 @@ instance Occurs Term where
           Dummy{}     -> return v
           DontCare v  -> dontCare <$> do underRelevance Irrelevant $ occurs a v
           Def d es    -> do
+            reportSDoc "tc.meta.occurs" 50 $ "Def case"
             definitionCheck d
+            reportSDoc "tc.meta.occurs" 50 $ "Definition check ok"
             Def d <$> occDef d es
           Con c ci vs -> do
             definitionCheck (conName c)
@@ -511,9 +513,12 @@ instance Occurs Term where
           Pi a b      -> Pi <$> occurs_ a <*> occurs a b
           Sort s      -> Sort <$> do underRelevance NonStrict $ occurs_ s
           MetaV m' es -> do
+            reportSDoc "tc.meta.occurs" 50 $ text "Case meta"
             m' <- metaCheck m'
+            reportSDoc "tc.meta.occurs" 50 $ text "Meta check ok"
             -- v Don't use getMetaType here since it might be a sort meta
             ma <- jMetaType <$> lookupMetaJudgement m'
+            reportSDoc "tc.meta.occurs" 50 $ text "Meta type: " <+> prettyTCM ma
             addOrUnblocker (unblockOnMeta m') $ do
                          -- If getting stuck here, we need to trigger wakeup if this meta is
                          -- solved.
@@ -544,22 +549,48 @@ instance Occurs Term where
             -- since e.g. x = List x is unsolvable
             occDef :: QName -> Elims -> OccursM Elims
             occDef d vs = do
+              reportSDoc "tc.meta.occurs" 50 $ text "occDef"
               m  <- asks (occMeta . feExtra)
               lift $ metaOccurs m d
+              reportSDoc "tc.meta.occurs" 50 $ text "metaOccurs done"
               hd <- isRelevantProjection d >>= \case
                 Just proj -> do
+                  reportSDoc "tc.meta.occurs" 50 $ text "Def is relevant projection"
                   let d' = projOrig proj
                       r  = unArg $ projFromType proj
+                  reportSDoc "tc.meta.occurs" 50 $ text "original projection:" <+> prettyTCM d'
+                  reportSDoc "tc.meta.occurs" 50 $ text "record:" <+> prettyTCM r
                   rtype <- defType <$> getConstInfo r
+                  reportSDoc "tc.meta.occurs" 50 $ text "record type:" <+> prettyTCM rtype
                   dtype <- defType <$> getConstInfo d'
+                  reportSDoc "tc.meta.occurs" 50 $ text "projection type:" <+> prettyTCM dtype
                   TelV ptel _ <- telView rtype
+                  reportSDoc "tc.meta.occurs" 50 $ text "ptel = " <+> prettyTCM ptel
                   n <- getContextSize
+                  reportSDoc "tc.meta.occurs" 50 $ text $ "n = " ++ show n
                   let pars = raise (n - size ptel) $ teleArgs ptel :: Args
+                  reportSDoc "tc.meta.occurs" 100 $ text $ "pars = " ++ show pars
+                  reportSDoc "tc.meta.occurs" 50 $ text "pars = " <+> prettyTCM pars
                   (,Def d') <$> (dtype `piApplyM` pars)
                 Nothing -> (,Def d) . defType <$> getConstInfo d
               ifM (liftTCM $ isJust <$> isDataOrRecordType d)
                 {-then-} (occurs hd vs)
                 {-else-} (defArgs $ occurs hd vs)
+
+            -- Run occurs check on an inferable term without knowing the type (and
+            -- infer the type on the way)
+            occurs' :: Term -> OccursM (Type, Term)
+            occurs' = \case
+              Var i es -> do
+                a <- typeOfBV i
+                allowed <- getAll . ($ unitModality) <$> variable i
+                if | allowed   -> second (Var i) <$> weakly (occursSpine (t , Var i) es)
+                   | otherwise -> strongly $ abort neverUnblock $ MetaCannotDependOn m i
+              Def f (Apply a : es) ->
+
+              Def f es -> do
+
+
 
   metaOccurs m v = do
     v <- instantiate v

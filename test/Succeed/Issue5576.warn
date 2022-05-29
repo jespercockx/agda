@@ -1,0 +1,6 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 1
+err > agda: src/full/Agda/TypeChecking/MetaVars/Occurs.hs:«line»:«col»-50: Non-exhaustive patterns in Pi b c
+err >
+err >
