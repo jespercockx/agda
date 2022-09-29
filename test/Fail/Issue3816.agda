@@ -1,4 +1,4 @@
-{-# OPTIONS --rewriting --confluence-check #-}
+{-# OPTIONS --rewriting --confluence-check -vrewriting.confluence:69 -vrewriting.parreduce:69 #-}
 
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
@@ -15,3 +15,6 @@ postulate
   rewg : (x : A) → g x ≡ a
 
 {-# REWRITE rewf₁ rewf₂ rewg #-}
+
+
+-- a <-- f (λ x → g x) --> f (λ x → a) --> b

@@ -44,58 +44,44 @@ import Agda.Utils.Size
 
 -- | Turn a term into a non-linear pattern, treating the
 --   free variables as pattern variables.
---   The first argument indicates the relevance we are working under: if this
---   is Irrelevant, then we construct a pattern that never fails to match.
---   The second argument is the number of bound variables (from pattern lambdas).
---   The third argument is the type of the term.
+--   The first argument is the number of bound variables (from pattern lambdas).
 
-class PatternFrom t a b where
-  patternFrom :: Relevance -> Int -> t -> a -> TCM b
+class PatternFrom a b where
+  patternFrom :: Int -> a -> TCM b
 
-instance (PatternFrom t a b) => PatternFrom (Dom t) (Arg a) (Arg b) where
-  patternFrom r k t u = let r' = r `composeRelevance` getRelevance u
-                        in  traverse (patternFrom r' k $ unDom t) u
+instance (PatternFrom a b) => PatternFrom (Arg a) (Arg b) where
+  patternFrom k u = traverse (patternFrom k) u
 
-instance PatternFrom (Type, Term) Elims [Elim' NLPat] where
-  patternFrom r k (t,hd) = \case
+instance PatternFrom Elims [Elim' NLPat] where
+  patternFrom k = \case
     [] -> return []
     (Apply u : es) -> do
-      ~(Pi a b) <- unEl <$> abortIfBlocked t
-      p   <- patternFrom r k a u
-      t'  <- piApplyM' (blockOnMetasIn t >> __IMPOSSIBLE__) t u
-      let hd' = hd `apply` [ u ]
-      ps  <- patternFrom r k (t',hd') es
+      p   <- patternFrom k u
+      ps  <- patternFrom k es
       return $ Apply p : ps
     (IApply x y i : es) -> do
-      ~(PathType s q l b u v) <- pathView =<< abortIfBlocked t
-      let t' = El s $ unArg b `apply` [ defaultArg i ]
-      let hd' = hd `applyE` [IApply x y i]
-      interval <- primIntervalType
-      p   <- patternFrom r k interval i
-      ps  <- patternFrom r k (t',hd') es
+      p   <- patternFrom k i
+      ps  <- patternFrom k es
       return $ IApply (PTerm x) (PTerm y) p : ps
     (Proj o f : es) -> do
-      ~(Just (El _ (Pi a b))) <- getDefType f =<< abortIfBlocked t
-      let t' = b `absApp` hd
-      hd' <- applyDef o f (argFromDom a $> hd)
-      ps  <- patternFrom r k (t',hd') es
+      ps  <- patternFrom k es
       return $ Proj o f : ps
 
-instance (PatternFrom t a b) => PatternFrom t (Dom a) (Dom b) where
-  patternFrom r k t = traverse $ patternFrom r k t
+instance (PatternFrom a b) => PatternFrom (Dom a) (Dom b) where
+  patternFrom k = traverse $ patternFrom k
 
-instance PatternFrom () Type NLPType where
-  patternFrom r k _ a = workOnTypes $
-    NLPType <$> patternFrom r k () (getSort a)
-            <*> patternFrom r k (sort $ getSort a) (unEl a)
+instance PatternFrom Type NLPType where
+  patternFrom k a = workOnTypes $
+    NLPType <$> patternFrom k (getSort a)
+            <*> patternFrom k (unEl a)
 
-instance PatternFrom () Sort NLPSort where
-  patternFrom r k _ s = do
+instance PatternFrom Sort NLPSort where
+  patternFrom k s = do
     s <- abortIfBlocked s
     case s of
-      Type l   -> PType <$> patternFrom r k () l
-      Prop l   -> PProp <$> patternFrom r k () l
-      SSet l   -> PSSet <$> patternFrom r k () l
+      Type l   -> PType <$> patternFrom k l
+      Prop l   -> PProp <$> patternFrom k l
+      SSet l   -> PSSet <$> patternFrom k l
       Inf f n  -> return $ PInf f n
       SizeUniv -> return PSizeUniv
       LockUniv -> return PLockUniv
@@ -112,38 +98,22 @@ instance PatternFrom () Sort NLPSort where
           ]
         __IMPOSSIBLE__
 
-instance PatternFrom () Level NLPat where
-  patternFrom r k _ l = do
-    t <- levelType
+instance PatternFrom Level NLPat where
+  patternFrom k l = do
     v <- reallyUnLevelView l
-    patternFrom r k t v
+    patternFrom k v
 
-instance PatternFrom Type Term NLPat where
-  patternFrom r0 k t v = do
-    t <- abortIfBlocked t
-    etaRecord <- isEtaRecordType t
-    prop <- isPropM t
-    let r = if prop then Irrelevant else r0
+instance PatternFrom Term NLPat where
+  patternFrom k v = do
     v <- unLevel =<< abortIfBlocked v
     reportSDoc "rewriting.build" 60 $ sep
       [ "building a pattern from term v = " <+> prettyTCM v
-      , " of type " <+> prettyTCM t
       ]
-    pview <- pathViewAsPi'whnf
     let done = blockOnMetasIn v >> return (PTerm v)
-    case (unEl t , stripDontCare v) of
-      (Pi a b , _) -> do
-        let body = raise 1 v `apply` [ Arg (domInfo a) $ var 0 ]
-        p <- addContext a (patternFrom r (k+1) (absBody b) body)
-        return $ PLam (domInfo a) $ Abs (absName b) p
-      _ | Left ((a,b),(x,y)) <- pview t -> do
-        let body = raise 1 v `applyE` [ IApply (raise 1 $ x) (raise 1 $ y) $ var 0 ]
-        p <- addContext a (patternFrom r (k+1) (absBody b) body)
-        return $ PLam (domInfo a) $ Abs (absName b) p
-      (_ , Var i es)
+    case stripDontCare v of
+      Var i es
        | i < k     -> do
-           t <- typeOfBV i
-           PBoundVar i <$> patternFrom r k (t , var i) es
+           PBoundVar i <$> patternFrom k es
        -- The arguments of `var i` should be distinct bound variables
        -- in order to build a Miller pattern
        | Just vs <- allApplyElims es -> do
@@ -156,44 +126,31 @@ instance PatternFrom Type Term NLPat where
                Just j | j < k -> return $ Just $ v $> j
                _              -> return Nothing
            case sequence mbvs of
-             Just bvs | fastDistinct bvs -> do
-               let allBoundVars = IntSet.fromList (downFrom k)
-                   ok = not (isIrrelevant r) ||
-                        IntSet.fromList (map unArg bvs) == allBoundVars
-               if ok then return (PVar i bvs) else done
+             Just bvs | fastDistinct bvs -> return (PVar i bvs)
              _ -> done
        | otherwise -> done
-      (_ , _ ) | Just (d, pars) <- etaRecord -> do
-        def <- theDef <$> getConstInfo d
-        (tel, c, ci, vs) <- etaExpandRecord_ d pars def v
-        caseMaybeM (getFullyAppliedConType c t) __IMPOSSIBLE__ $ \ (_ , ct) -> do
-        PDef (conName c) <$> patternFrom r k (ct , Con c ci []) (map Apply vs)
-      (_ , Lam i t) -> __IMPOSSIBLE__
-      (_ , Lit{})   -> done
-      (_ , Def f es) | isIrrelevant r -> done
-      (_ , Def f es) -> do
+      Lam i t -> underAbstraction_ t $ \body ->
+        PLam i . Abs (absName t) <$> patternFrom (k+1) body
+      Lit{}   -> done
+      Def f es -> do
         Def lsuc [] <- primLevelSuc
         Def lmax [] <- primLevelMax
         case es of
           [x]     | f == lsuc -> done
           [x , y] | f == lmax -> done
           _                   -> do
-            ft <- defType <$> getConstInfo f
-            PDef f <$> patternFrom r k (ft , Def f []) es
-      (_ , Con c ci vs) | isIrrelevant r -> done
-      (_ , Con c ci vs) ->
-        caseMaybeM (getFullyAppliedConType c t) __IMPOSSIBLE__ $ \ (_ , ct) -> do
-        PDef (conName c) <$> patternFrom r k (ct , Con c ci []) vs
-      (_ , Pi a b) | isIrrelevant r -> done
-      (_ , Pi a b) -> do
-        pa <- patternFrom r k () a
-        pb <- addContext a (patternFrom r (k+1) () $ absBody b)
+            PDef f <$> patternFrom k es
+      Con c ci vs ->
+        PDef (conName c) <$> patternFrom k vs
+      Pi a b -> do
+        pa <- patternFrom k a
+        pb <- addContext a (patternFrom (k+1) $ absBody b)
         return $ PPi pa (Abs (absName b) pb)
-      (_ , Sort s)     -> PSort <$> patternFrom r k () s
-      (_ , Level l)    -> __IMPOSSIBLE__
-      (_ , DontCare{}) -> __IMPOSSIBLE__
-      (_ , MetaV m _)  -> __IMPOSSIBLE__
-      (_ , Dummy s _)  -> __IMPOSSIBLE_VERBOSE__ s
+      Sort s     -> PSort <$> patternFrom k s
+      Level l    -> __IMPOSSIBLE__
+      DontCare{} -> __IMPOSSIBLE__
+      MetaV m _  -> __IMPOSSIBLE__
+      Dummy s _  -> __IMPOSSIBLE_VERBOSE__ s
 
 -- | Convert from a non-linear pattern to a term.
 
