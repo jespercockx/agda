@@ -21,24 +21,30 @@
 
 module Agda.TypeChecking.Sort where
 
+import Prelude hiding (null)
+
 import Control.Monad
 import Control.Monad.Except
 
 import Data.Functor
 import Data.Maybe
+import qualified Data.Set as Set
+import Data.Set (Set)
 
 import Agda.Interaction.Options (optCumulativity, optRewriting)
 
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
+import Agda.Syntax.Internal.MetaVars
 
 import {-# SOURCE #-} Agda.TypeChecking.Constraints () -- instance only
 import {-# SOURCE #-} Agda.TypeChecking.Conversion
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars () -- instance only
 
+import Agda.TypeChecking.Free
 import Agda.TypeChecking.Monad.Base
 import Agda.TypeChecking.Monad.Builtin (HasBuiltins)
-import Agda.TypeChecking.Monad.Constraints (addConstraint, MonadConstraint)
+import Agda.TypeChecking.Monad.Constraints (addConstraint, catchConstraint, MonadConstraint)
 import Agda.TypeChecking.Monad.Context
 import Agda.TypeChecking.Monad.Debug
 import Agda.TypeChecking.Monad.MetaVars (metaType)
@@ -54,6 +60,7 @@ import Agda.TypeChecking.Telescope
 import Agda.Utils.Impossible
 import Agda.Utils.Lens
 import Agda.Utils.Monad
+import Agda.Utils.Null
 
 -- | Infer the sort of another sort. If we can compute the bigger sort
 --   straight away, return that. Otherwise, return @UnivSort s@ and add a
@@ -123,19 +130,54 @@ ptsRule' a b c = do
     (leqSort c' c)
     (equalSort c' c)
 
+-- | Check that the sort of a pi type is well-formed.
+--   A `PiSort` is only valid if the argument is definitely used in
+--   the codomain sort, even under arbitrary substitutions (see #5810).
 hasPTSRule :: Dom Type -> Abs Sort -> TCM ()
-hasPTSRule a b = void $ inferPiSort a b
+hasPTSRule a (NoAbs _ s) = return ()
+hasPTSRule a sAbs@(Abs x s) = catchConstraint (HasPTSRule a sAbs) $ do
+  reportSDoc "tc.sort" 20 $ vcat
+    [ "hasPTSRule"
+    , nest 2 $ "a = " <+> prettyTCM a
+    , nest 2 $ "x = " <+> text x
+    , nest 2 $ "s = " <+> addContext (x,a) (prettyTCM s)
+    ]
+  case piSort (unEl <$> a) (getSort $ unDom a) sAbs of
+    Inf _ 0
+      | Just _ <- flexRigOccurrenceIn 0 s
+      , Just (True,_) <- isSmallSort (getSort a) -> case s of
+          Type l -> addContext (x,a) $ checkLevel l
+          Prop l -> addContext (x,a) $ checkLevel l
+          SSet l -> addContext (x,a) $ checkLevel l
+          _      -> return ()
+    PiSort{} -> patternViolation $ unblockOnAllMetasIn s
+    _        -> return ()
+  where
+    failure :: Set Blocker -> TCM a
+    failure bs
+      | null bs = genericDocError =<< do
+                    "Invalid sort: " <+> prettyTCM s
+      | otherwise = patternViolation $ unblockOnAny bs
 
--- | Recursively check that an iterated function type constructed by @telePi@
+    checkLevel :: Level -> TCM ()
+    checkLevel (Max _ ls) = checkPlusLevels empty ls
+
+    checkPlusLevels :: Set Blocker -> [PlusLevel] -> TCM ()
+    checkPlusLevels bs [] = failure bs
+    checkPlusLevels bs (Plus _ t : ls) = ifBlocked t
+      (\b _ -> checkPlusLevels (Set.insert b bs) ls)
+      (\nb t -> case (nb , t) of
+          (_ , Var 0 []) -> return ()
+          (StuckOn (Apply (Arg _ (Var 0 _))) , _) -> return ()
+          _ -> checkPlusLevels bs ls)
+
+-- | Check that an iterated function type constructed by @telePi@
 --   is well-sorted.
 checkTelePiSort :: Type -> TCM ()
--- Jesper, 2019-07-27: This is currently doing nothing (see comment in inferPiSort)
---checkTelePiSort (El s (Pi a b)) = do
---  -- Since the function type is assumed to be constructed by @telePi@,
---  -- we already know that @s == piSort (getSort a) (getSort <$> b)@,
---  -- so we just check that this sort is well-formed.
---  hasPTSRule a (getSort <$> b)
---  underAbstraction a b checkTelePiSort
+checkTelePiSort (El _ (Pi a (NoAbs _ b))) = checkTelePiSort b
+checkTelePiSort (El _ (Pi a b)) = do
+  hasPTSRule a (getSort <$> b)
+  underAbstraction a b checkTelePiSort
 checkTelePiSort _ = return ()
 
 ifIsSort :: (MonadReduce m, MonadBlock m) => Type -> (Sort -> m a) -> m a -> m a
