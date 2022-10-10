@@ -1,2 +1,9 @@
+Failed to solve the following constraints:
+  Has PTS rule: ({_ : Size< i} → Set , funSort (_3 (i = i) (f = f))
+                                       Set₁)
+    (blocked on _3)
+  Has PTS rule: (Size , piSort Set₁
+                        (λ f → funSort (_3 (i = i) (f = f)) Set₁))
+    (blocked on _3)
 Unsolved metas at the following locations:
   Issue2927.agda:9,49-50

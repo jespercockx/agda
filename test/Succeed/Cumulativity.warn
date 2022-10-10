@@ -1,0 +1,137 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Failed to solve the following constraints:
+out >   piSort (Set ℓ)
+out >   (λ x →
+out >      Set
+out >      (ℓ ⊔ ℓ′ ⊔ _ℓ_236 (n = n) (P = P) (x = x) ⊔
+out >       _ℓ′_237 (n = n) (P = P) (x = x)))
+out >     =< Set (ℓ ⊔ ℓ′)
+out >     (blocked on any(_ℓ_236, _ℓ′_237))
+out >   Has PTS rule: (A , Set
+out >                      (ℓ ⊔ ℓ′ ⊔ _ℓ_236 (n = n) (P = P) (x = x) ⊔
+out >                       _ℓ′_237 (n = n) (P = P) (x = x)))
+out >     (blocked on all(_ℓ_236, _ℓ′_237))
+out >   ℓ ⊔ _ℓ₁_228 (n = (suc n)) = ℓ ⊔ _ℓ₁_228 (n = n) ⊔ _ℓ_236
+out >     (blocked on any(_ℓ₁_228, _ℓ_236, _ℓ′_237))
+out >   lsuc ℓ′ ⊔ _ℓ₂_229 (n = (suc n))
+out >     = lsuc ℓ′ ⊔ _ℓ₂_229 (n = n) ⊔ lsuc _ℓ′_237
+out >     (blocked on any(_ℓ₂_229, _ℓ_236, _ℓ′_237))
+out >   Has PTS rule: ({Set ℓ} , piSort Set
+out >                            (λ n → Set (lsuc ℓ ⊔ lsuc ℓ′ ⊔ _ℓ₁_228 (n = n) ⊔ _ℓ₂_229 (n = n))))
+out >     (blocked on all(_ℓ₁_228, _ℓ₂_229))
+out >   Has PTS rule: (Nat , Set
+out >                        (lsuc ℓ ⊔ lsuc ℓ′ ⊔ _ℓ₁_228 (n = n) ⊔ _ℓ₂_229 (n = n)))
+out >     (blocked on all(_ℓ₁_228, _ℓ₂_229))
+out >   lsuc (lsuc lzero) ⊔ _ℓ_117 (f = f)
+out >     = lsuc (lsuc lzero) ⊔ _ℓ_71 (f = f) ⊔ _A.ℓ_124
+out >     (blocked on any(_ℓ_71, _ℓ_117, _B.ℓ_122, _A.ℓ_124))
+out >   Has PTS rule: (A → B , Set
+out >                          (lsuc (lsuc lzero) ⊔ _ℓ_72 (f = f) ⊔ _ℓ_117 (f = f) ⊔ _B.ℓ_122))
+out >     (blocked on all(_ℓ_72, _ℓ_117, _B.ℓ_122, _A.ℓ_124))
+out >   Has PTS rule: ({Set} , piSort Set₂
+out >                          (λ f →
+out >                             Set
+out >                             (lsuc (lsuc lzero) ⊔ _ℓ_72 (f = f) ⊔ _ℓ_117 (f = f) ⊔ _B.ℓ_122)))
+out >     (blocked on all(_ℓ_72, _ℓ_117, _B.ℓ_122, _A.ℓ_124))
+out >   Has PTS rule: ({Set₂} , piSort Set₁
+out >                           (λ B →
+out >                              piSort Set₂
+out >                              (λ f →
+out >                                 Set
+out >                                 (lsuc (lsuc lzero) ⊔ _ℓ_72 (f = f) ⊔ _ℓ_117 (f = f) ⊔ _B.ℓ_122))))
+out >     (blocked on all(_ℓ_72, _ℓ_117, _B.ℓ_122, _A.ℓ_124))
+out >   lsuc lzero ⊔ _ℓ_105 (f = f) = lsuc lzero ⊔ _ℓ_71 (f = f) ⊔ _A.ℓ_112
+out >     (blocked on any(_ℓ_71, _ℓ_105, _B.ℓ_110, _A.ℓ_112))
+out >   Has PTS rule: (A → B , Set
+out >                          (lsuc lzero ⊔ _ℓ_72 (f = f) ⊔ _ℓ_105 (f = f) ⊔ _B.ℓ_110))
+out >     (blocked on all(_ℓ_72, _ℓ_105, _B.ℓ_110, _A.ℓ_112))
+out >   Has PTS rule: ({Set} , piSort Set₁
+out >                          (λ f →
+out >                             Set (lsuc lzero ⊔ _ℓ_72 (f = f) ⊔ _ℓ_105 (f = f) ⊔ _B.ℓ_110)))
+out >     (blocked on all(_ℓ_72, _ℓ_105, _B.ℓ_110, _A.ℓ_112))
+out >   Has PTS rule: ({Set₁} , piSort Set₁
+out >                           (λ B →
+out >                              piSort Set₁
+out >                              (λ f →
+out >                                 Set (lsuc lzero ⊔ _ℓ_72 (f = f) ⊔ _ℓ_105 (f = f) ⊔ _B.ℓ_110))))
+out >     (blocked on all(_ℓ_72, _ℓ_105, _B.ℓ_110, _A.ℓ_112))
+out >   lsuc lzero ⊔ _ℓ_72 (f = f) ⊔ _B.ℓ_100 = lsuc lzero ⊔ _ℓ_95 (f = f)
+out >     (blocked on any(_ℓ_72, _ℓ_95, _A.ℓ_96, _B.ℓ_100))
+out >   Has PTS rule: (A → B , Set
+out >                          (lsuc lzero ⊔ _ℓ_71 (f = f) ⊔ _ℓ_95 (f = f) ⊔ _A.ℓ_96))
+out >     (blocked on all(_ℓ_71, _ℓ_95, _A.ℓ_96, _B.ℓ_100))
+out >   Has PTS rule: ({Set₁} , piSort Set₁
+out >                           (λ f → Set (lsuc lzero ⊔ _ℓ_71 (f = f) ⊔ _ℓ_95 (f = f) ⊔ _A.ℓ_96)))
+out >     (blocked on all(_ℓ_71, _ℓ_95, _A.ℓ_96, _B.ℓ_100))
+out >   Has PTS rule: ({Set} , piSort Set₂
+out >                          (λ B →
+out >                             piSort Set₁
+out >                             (λ f →
+out >                                Set (lsuc lzero ⊔ _ℓ_71 (f = f) ⊔ _ℓ_95 (f = f) ⊔ _A.ℓ_96))))
+out >     (blocked on all(_ℓ_71, _ℓ_95, _A.ℓ_96, _B.ℓ_100))
+out >   Has PTS rule: ({Set} , piSort Set₁
+out >                          (λ B →
+out >                             piSort Set
+out >                             (λ f → Set (_ℓ_71 (f = f) ⊔ _ℓ_72 (f = f) ⊔ _A.ℓ_85 ⊔ _B.ℓ_87))))
+out >     (blocked on all(_ℓ_71, _ℓ_72, _A.ℓ_85, _B.ℓ_87))
+out >   Has PTS rule: ({Set} , piSort Set
+out >                          (λ f → Set (_ℓ_71 (f = f) ⊔ _ℓ_72 (f = f) ⊔ _A.ℓ_85 ⊔ _B.ℓ_87)))
+out >     (blocked on all(_ℓ_71, _ℓ_72, _A.ℓ_85, _B.ℓ_87))
+out >   Has PTS rule: (A → B , Set
+out >                          (_ℓ_71 (f = f) ⊔ _ℓ_72 (f = f) ⊔ _A.ℓ_85 ⊔ _B.ℓ_87))
+out >     (blocked on all(_ℓ_71, _ℓ_72, _A.ℓ_85, _B.ℓ_87))
+out >   _ℓ_40 (A = B) (x = (f x)) (xs = (map f xs)) =< B.ℓ ⊔ _ℓ_72 (f = f)
+out >     (blocked on any(_ℓ_40, _ℓ_72, _A.ℓ_77, _B.ℓ_78))
+out >   A.ℓ ⊔ _ℓ_37 (A = A) (x = x) ⊔ _ℓ_71 (f = f)
+out >     = A.ℓ ⊔ _ℓ_71 (f = f) ⊔ _A.ℓ_77
+out >     (blocked on any(_ℓ_37, _ℓ_71, _A.ℓ_77, _B.ℓ_78))
+out >   B.ℓ ⊔ _ℓ_72 (f = f) ⊔ _B.ℓ_78
+out >     = B.ℓ ⊔ _ℓ_37 (A = B) (x = (f x)) ⊔ _ℓ_72 (f = f)
+out >     (blocked on any(_ℓ_37, _ℓ_72, _A.ℓ_77, _B.ℓ_78))
+out >   Has PTS rule: (A → B , Set
+out >                          (A.ℓ ⊔ B.ℓ ⊔ _ℓ_71 (f = f) ⊔ _ℓ_72 (f = f)))
+out >     (blocked on all(_ℓ_71, _ℓ_72))
+out >   _ℓ_50 (ℓ′ = (lsuc (lsuc (lsuc lzero)))) ⊔ _ℓ_56 = lsuc lzero
+out >     (blocked on any(_ℓ_50, _ℓ_56))
+out >   _ℓ_56 =< lsuc (lsuc (lsuc lzero)) (blocked on _ℓ_56)
+out >   _ℓ_40 (A = A) (x = x) (xs = (lower-List ℓ xs))
+out >     =< ℓ₁ ⊔ _ℓ_50 (ℓ′ = ℓ)
+out >     (blocked on any(_ℓ_40, _ℓ_50, _ℓ_53))
+out >   ℓ₁ ⊔ ℓ ⊔ _ℓ_37 (A = A) (x = x) = ℓ₁ ⊔ ℓ ⊔ _ℓ_53
+out >     (blocked on any(_ℓ_37, _ℓ_53))
+out >   ℓ₁ ⊔ _ℓ_50 (ℓ′ = ℓ) ⊔ _ℓ_53
+out >     = ℓ₁ ⊔ _ℓ_37 (A = A) (x = x) ⊔ _ℓ_50 (ℓ′ = ℓ)
+out >     (blocked on any(_ℓ_37, _ℓ_50, _ℓ_53))
+out >   Has PTS rule: (Level , piSort (Set (lsuc ℓ))
+out >                          (λ A → Set (ℓ ⊔ ℓ′ ⊔ _ℓ_50 (ℓ′ = ℓ′))))
+out >     (blocked on _ℓ_50)
+out >   Has PTS rule: ({Set ℓ} , Set (ℓ ⊔ ℓ′ ⊔ _ℓ_50 (ℓ′ = ℓ′)))
+out >     (blocked on _ℓ_50)
+out >   _ℓ_40 (A = A) (x = x) (xs = xs) =< ℓ (blocked on _ℓ_40)
+out >   _ℓ_37 (A = A) (x = x) =< ℓ (blocked on _ℓ_37)
+out >   Has PTS rule: (List A , Set (ℓ ⊔ _ℓ_40 (A = A) (x = x) (xs = xs)))
+out >     (blocked on _ℓ_40)
+out >   Has PTS rule: (A , piSort (Set (ℓ ⊔ _ℓ_37 (A = A) (x = x)))
+out >                      (λ xs → Set (ℓ ⊔ _ℓ_40 (A = A) (x = x) (xs = xs))))
+out >     (blocked on all(_ℓ_37, _ℓ_40))
+out > Unsolved metas at the following locations:
+out >   Cumulativity.agda:30,23-27
+out >   Cumulativity.agda:30,33-37
+out >   Cumulativity.agda:35,51-55
+out >   Cumulativity.agda:37,29-39
+out >   Cumulativity.agda:40,20-30
+out >   Cumulativity.agda:42,21-25
+out >   Cumulativity.agda:42,30-34
+out >   Cumulativity.agda:44,24-27
+out >   Cumulativity.agda:47,9-12
+out >   Cumulativity.agda:49,53-57
+out >   Cumulativity.agda:50,9-12
+out >   Cumulativity.agda:52,44-48
+out >   Cumulativity.agda:53,9-12
+out >   Cumulativity.agda:55,44-48
+out >   Cumulativity.agda:56,9-12
+out >   Cumulativity.agda:86,26-31
+out >   Cumulativity.agda:88,24-26
+out >

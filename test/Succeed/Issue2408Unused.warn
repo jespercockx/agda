@@ -1,0 +1,7 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Issue2408Unused.agda:23,7-28
+out > Invalid sort:  Set (lsuc (l u a))
+out > when checking that the expression (a : ⊥) → Set (l u a) is a type
+out >

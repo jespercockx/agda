@@ -5,6 +5,7 @@ Failed to solve the following constraints:
       Cannot split on argument of unresolved type _2 (A = Bool)
       when checking that the pattern true has type _2 (A = Bool)
     (blocked on _2)
+  Has PTS rule: (Set , funSort (_3 (A = A)) Set₁) (blocked on _3)
 Unsolved metas at the following locations:
   Issue2834.agda:4,27-28
   Issue2834.agda:4,35-36

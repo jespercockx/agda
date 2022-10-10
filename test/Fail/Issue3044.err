@@ -1,5 +1,6 @@
 Failed to solve the following constraints:
   _V_10 =< U ⊔ V (blocked on _V_10)
   U ⊔ _V_10 = V (blocked on _V_10)
+  Has PTS rule: ({Set U} , Set (U ⊔ _V_10)) (blocked on _V_10)
 Unsolved metas at the following locations:
   Issue3044.agda:21,32-33

@@ -1,5 +1,16 @@
 Failed to solve the following constraints:
   _4 (f = f) (x = x) = f x : Set (blocked on _4)
+  Has PTS rule: (Set₁ , Set
+                        (Agda.Primitive.lsuc Agda.Primitive.lzero Agda.Primitive.⊔
+                         _a_3 (f = f) (x = x)))
+    (blocked on _a_3)
+  Has PTS rule: (Set₁ → Set , piSort Set₂
+                              (λ x →
+                                 Set
+                                 (Agda.Primitive.lsuc Agda.Primitive.lzero Agda.Primitive.⊔
+                                  _a_3 (f = f) (x = x))))
+    (blocked on _a_3)
 Unsolved metas at the following locations:
+  Issue4401.agda:10,47-48
   Issue4401.agda:8,12-13
   Issue4401.agda:11,14-18

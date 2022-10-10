@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 -- | This module contains the rules for Agda's sort system viewed as a pure
 --   type system (pts). The specification of a pts consists of a set
@@ -31,7 +32,7 @@ import Data.Maybe
 import qualified Data.Set as Set
 import Data.Set (Set)
 
-import Agda.Interaction.Options (optCumulativity, optRewriting)
+import Agda.Interaction.Options (optCumulativity, optRewriting, optCubical)
 
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
@@ -136,6 +137,7 @@ ptsRule' a b c = do
 hasPTSRule :: Dom Type -> Abs Sort -> TCM ()
 hasPTSRule a (NoAbs _ s) = return ()
 hasPTSRule a sAbs@(Abs x s) = catchConstraint (HasPTSRule a sAbs) $ do
+  unlessM (isJust . optCubical <$> pragmaOptions) $ do
   reportSDoc "tc.sort" 20 $ vcat
     [ "hasPTSRule"
     , nest 2 $ "a = " <+> prettyTCM a
