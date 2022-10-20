@@ -244,7 +244,7 @@ recheckAbstractClause t sub acl = checkClauseLHS t sub acl $ \ lhs -> do
 -- | Entry point for case splitting tactic.
 
 makeCase :: InteractionId -> Range -> String -> TCM (QName, CaseContext, [A.Clause])
-makeCase hole rng s = withInteractionId hole $ locallyTC eMakeCase (const True) $ do
+makeCase hole rng s = locallyTC eMakeCase (const True) $ do
 
   -- Jesper, 2018-12-10: print unsolved metas in dot patterns as _
   localTC (\ e -> e { envPrintMetasBare = True }) $ do
@@ -256,6 +256,9 @@ makeCase hole rng s = withInteractionId hole $ locallyTC eMakeCase (const True) 
     IPNoClause                -> typeError $ GenericError $
       "Cannot split here, as we are not in a function definition"
   (casectxt, (prevClauses0, _clause, follClauses0)) <- getClauseZipperForIP f clauseNo
+
+  -- Jesper, 2022-10-19: This needs to come *after* getClauseZipperForIP (not sure why)
+  withInteractionId hole $ do
 
   -- Instead of using the actual internal clause, we retype check the abstract clause (with
   -- eMakeCase = True). This disables the forcing translation in the unifier, which allows us to

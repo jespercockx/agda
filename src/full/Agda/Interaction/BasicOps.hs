@@ -53,6 +53,7 @@ import Agda.TypeChecking.Monad as M hiding (MetaInfo)
 import Agda.TypeChecking.MetaVars
 import Agda.TypeChecking.MetaVars.Mention
 import Agda.TypeChecking.Reduce
+import Agda.TypeChecking.Rules.Decl ( checkPositivity_ )
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.With
@@ -87,6 +88,7 @@ import Agda.Utils.Null
 import Agda.Utils.Pretty as P
 import Agda.Utils.Permutation
 import Agda.Utils.Size
+import qualified Agda.Utils.SmallSet as SmallSet
 import Agda.Utils.String
 
 import Agda.Utils.Impossible
@@ -182,9 +184,12 @@ redoChecks (Just ii) = do
     IPNoClause -> return ()
     IPClause{ipcQName = f} -> do
       mb <- mutualBlockOf f
-      terErrs <- localTC (\ e -> e { envMutualBlock = Just mb }) $ termMutual []
+      MutualBlock{..} <- lookupMutualBlock mb
+      modifyAllowedReductions (SmallSet.delete UnconfirmedReductions) $
+        checkPositivity_ mutualInfo mutualNames
+      terErrs <- localTC (\ e -> e { envMutualBlock = Just mb }) $
+        termMutual (Set.toList mutualNames)
       unless (null terErrs) $ warning $ TerminationIssue terErrs
-  -- TODO redo positivity check!
 
 -- | Try to fill hole by expression.
 --

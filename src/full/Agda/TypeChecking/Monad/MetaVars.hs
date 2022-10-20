@@ -678,7 +678,9 @@ getInteractionScope =
   getMetaScope <.> lookupLocalMeta <=< lookupInteractionId
 
 withMetaInfo' :: (MonadTCEnv m, ReadTCState m, MonadTrace m) => MetaVariable -> m a -> m a
-withMetaInfo' mv = withMetaInfo (miClosRange $ mvInfo mv)
+withMetaInfo' mv =
+  locallyTCState stSignature (const $ getMetaSig mv) .
+  withMetaInfo (miClosRange $ mvInfo mv)
 
 withMetaInfo :: (MonadTCEnv m, ReadTCState m, MonadTrace m) => Closure Range -> m a -> m a
 withMetaInfo mI cont = enterClosure mI $ \ r ->
