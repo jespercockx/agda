@@ -429,18 +429,20 @@ checkRelevance' x def = do
 --   Returns 'Nothing' if ok, otherwise the error message.
 checkQuantity' :: QName -> Definition -> TCM (Maybe TypeError)
 checkQuantity' x def = do
-  case getQuantity def of
-    dq@Quantityω{} -> do
-      reportSDoc "tc.irr" 50 $ vcat
-        [ "declaration quantity =" <+> text (show dq)
-        -- , "context     quantity =" <+> text (show q)
-        ]
-      return Nothing -- Abundant definitions can be used in any context.
+  let dq = getQuantity def
+  reportSDoc "tc.irr" 50 $ vcat
+    [ "declaration quantity =" <+> text (show dq)
+    -- , "context     quantity =" <+> text (show q)
+    ]
+  case dq of
+    -- Abundant definitions can be used in any context.
+    Quantityω{} -> return Nothing
+    -- Since generalizable variables only occur in types, we can ignore their quantity.
+    _ | GeneralizableVar{} <- theDef def -> return Nothing
     dq -> do
       q <- asksTC getQuantity
       reportSDoc "tc.irr" 50 $ vcat
-        [ "declaration quantity =" <+> text (show dq)
-        , "context     quantity =" <+> text (show q)
+        [ "context     quantity =" <+> text (show q)
         ]
       return $ if (dq `moreQuantity` q) then Nothing else Just $ DefinitionIsErased x
 

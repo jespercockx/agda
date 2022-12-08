@@ -389,9 +389,8 @@ checkTypedBindings lamOrPi (A.TBind r tac xps e) ret = do
         -- types, but do not modify the new context entries
         -- otherwise, if we are checking a pi, we do not resurrect, but
         -- modify the new context entries
-        modEnv LamNotPi = workOnTypes
-        modEnv _        = id
         modMod PiNotLam xp = (if xp then mapRelevance irrToNonStrict else id)
+                           . setQuantity topQuantity
         modMod _        _  = id
 
 checkTypedBindings lamOrPi (A.TLet _ lbs) ret = do
