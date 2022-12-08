@@ -1,4 +1,4 @@
 Failed to solve the following constraints:
-  A = _9 : Set (blocked on _9)
+  _3 = A : Set (blocked on _3)
 Unsolved metas at the following locations:
-  ErasedMacro3.agda:12,7-10
+  Issue6124-bad.agda:11,10-15

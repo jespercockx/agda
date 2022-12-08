@@ -1,8 +1,8 @@
 open import Agda.Builtin.Reflection
 open import Agda.Builtin.Unit
 
-@0 A : Set₁
-A = Set
+postulate
+  @0 A : Set₁
 
 macro
 

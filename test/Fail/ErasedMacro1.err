@@ -1,3 +1,4 @@
 ErasedMacro1.agda:15,5-6
-Identifier A is declared erased, so it cannot be used here
-when inferring the type of A
+Cannot instantiate the metavariable _9 to solution A
+since (part of) the solution was created in an erased context
+when checking that the expression unquote m has type Set₁

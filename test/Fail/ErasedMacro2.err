@@ -1,3 +1,4 @@
-ErasedMacro2.agda:12,7-10
-Variable A is declared erased, so it cannot be used here
-when inferring the type of A
+Failed to solve the following constraints:
+  A = _9 : Set (blocked on _9)
+Unsolved metas at the following locations:
+  ErasedMacro2.agda:12,7-10

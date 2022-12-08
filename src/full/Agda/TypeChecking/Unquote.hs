@@ -43,7 +43,7 @@ import Agda.Interaction.Options ( optTrustedExecutables, optAllowExec )
 import Agda.TypeChecking.Constraints
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Free
-import Agda.TypeChecking.Irrelevance ( workOnTypes )
+import Agda.TypeChecking.Irrelevance ( workOnTypes , applyQuantityToContext )
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Substitute
@@ -563,6 +563,9 @@ evalTCM v = do
   liftTCM $ reportSDoc "tc.unquote.eval" 90 $ "evalTCM" <+> prettyTCM v
   let failEval = throwError $ NonCanonical "type checking computation" v
 
+  -- 2022-12-07, Jesper, #6124: TC computations can be run in erased mode.
+  -- This technically allows "resurrection" of erased values within a TC
+  -- computation, but such resurrected values have no way to escape from TC.
   case v of
     I.Def f [] ->
       choice [ (f `isDef` primAgdaTCMGetContext,       tcGetContext)
@@ -694,8 +697,10 @@ evalTCM v = do
 
     tcUnify :: R.Term -> R.Term -> TCM Term
     tcUnify u v = do
-      (u, a) <- locallyReduceAllDefs $ inferExpr        =<< toAbstract_ u
-      v      <- locallyReduceAllDefs $ flip checkExpr a =<< toAbstract_ v
+      (a, u, v) <- applyQuantityToContext zeroQuantity $ locallyReduceAllDefs $ do 
+        (u, a) <- inferExpr =<< toAbstract_ u
+        v      <- flip checkExpr a =<< toAbstract_ v
+        return (a,u,v)
       equalTerm a u v
       primUnitUnit
 
@@ -730,7 +735,7 @@ evalTCM v = do
     tcInferType :: R.Term -> TCM Term
     tcInferType v = do
       r <- isReconstructed
-      (_, a) <- inferExpr =<< toAbstract_ v
+      (_, a) <- applyQuantityToContext zeroQuantity $ inferExpr =<< toAbstract_ v
       if r then do
         a <- process a
         a <- locallyReduceAllDefs $ reconstructParametersInType a
@@ -744,7 +749,7 @@ evalTCM v = do
     tcCheckType v a = do
       r <- isReconstructed
       a <- workOnTypes $ locallyReduceAllDefs $ isType_ =<< toAbstract_ a
-      e <- toAbstract_ v
+      e <- applyQuantityToContext zeroQuantity $ toAbstract_ v
       v <- checkExpr e a
       if r then do
         v <- process v
@@ -765,13 +770,14 @@ evalTCM v = do
 
     tcUnquoteTerm :: Type -> R.Term -> TCM Term
     tcUnquoteTerm a v = do
-      e <- toAbstract_ v
+      e <- applyQuantityToContext zeroQuantity $ toAbstract_ v
       checkExpr e a
 
     tcNormalise :: R.Term -> TCM Term
     tcNormalise v = do
       r <- isReconstructed
-      (v, t) <- locallyReduceAllDefs $ inferExpr  =<< toAbstract_ v
+      (v, t) <- applyQuantityToContext zeroQuantity $ locallyReduceAllDefs $ 
+        inferExpr =<< toAbstract_ v
       if r then do
         v <- normalise v
         t <- normalise t
@@ -784,7 +790,8 @@ evalTCM v = do
     tcReduce :: R.Term -> TCM Term
     tcReduce v = do
       r <- isReconstructed
-      (v, t) <- locallyReduceAllDefs $ inferExpr =<< toAbstract_ v
+      (v, t) <- applyQuantityToContext zeroQuantity $ locallyReduceAllDefs $ 
+        inferExpr =<< toAbstract_ v
       if r then do
         v <- reduce =<< instantiateFull v
         t <- reduce =<< instantiateFull t
@@ -924,7 +931,7 @@ evalTCM v = do
           [ "declare" <+> prettyTCM x <+> ":"
           , nest 2 $ prettyR a
           ]
-        a <- locallyReduceAllDefs $ isType_ =<< toAbstract_ a
+        a <- workOnTypes $ locallyReduceAllDefs $ isType_ =<< toAbstract_ a
         alreadyDefined <- isRight <$> getConstInfo' x
         when alreadyDefined $ genericError $ "Multiple declarations of " ++ prettyShow x
         addConstant' x i x a emptyFunction
@@ -945,7 +952,7 @@ evalTCM v = do
           [ "declare Postulate" <+> prettyTCM x <+> ":"
           , nest 2 $ prettyR a
           ]
-        a <- locallyReduceAllDefs $ isType_ =<< toAbstract_ a
+        a <- workOnTypes $ locallyReduceAllDefs $ isType_ =<< toAbstract_ a
         alreadyDefined <- isRight <$> getConstInfo' x
         when alreadyDefined $ genericError $ "Multiple declarations of " ++ prettyShow x
         addConstant' x i x a defaultAxiom

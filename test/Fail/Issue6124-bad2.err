@@ -1,0 +1,3 @@
+Issue6124-bad2.agda:16,41-42
+Identifier X is declared erased, so it cannot be used here
+when checking that the expression X has type _A_16
