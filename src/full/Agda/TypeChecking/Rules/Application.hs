@@ -246,9 +246,21 @@ inferApplication exh hd args e = postponeInstanceConstraints $ do
     A.Def' x s | x == nameOfSSet     -> inferSSet e x s args
     A.Def' x s | x == nameOfSetOmega IsFibrant -> inferSetOmega e x IsFibrant s args
     A.Def' x s | x == nameOfSetOmega IsStrict  -> inferSetOmega e x IsStrict s args
-    _ -> do
+    hdx -> do
       (f, t0) <- inferHead hd
       let r = getRange hd
+      -- Jesper, 2022-12-15, #6406: We need to insert the parameter arguments
+      -- to projections in a call to `workOnTypes` in order to allow them to be
+      -- solved with an erased solution.
+      (f, t0, args) <- case hdx of
+        A.Proj{} | not (null args), not (checkForParams args) -> do
+          (ws, t0) <- workOnTypes $ implicitArgs (-1) (not . visible) t0
+           -- v We can safely drop the parameter arguments because
+           --   `checkForParams` makes sure that all parameters are
+           --   underscores
+          let args' = dropWhile (not . visible) args
+          return (f . (map Apply ws ++) , t0, args')
+        _ -> return (f, t0, args)
       res <- runExceptT $ checkArgumentsE CmpEq exh (getRange hd) args t0 Nothing
       case res of
         Right st@(ACState{acType = t1}) -> fmap (,t1) $ unfoldInlined =<< checkHeadConstraints f st
@@ -274,7 +286,7 @@ inferHeadDef o x = do
 
 -- | Infer the type of a head thing (variable, function symbol, or constructor).
 --   We return a function that applies the head to arguments.
---   This is because in case of a constructor we want to drop the parameters.
+--   This is because in case of a constructor or projection we want to drop the parameters.
 inferHead :: A.Expr -> TCM (Elims -> Term, Type)
 inferHead e = do
   case e of
@@ -506,6 +518,13 @@ checkHeadApplication cmp e t hd args = do
   defaultResult' :: Maybe (MaybeRanges -> Args -> Type -> TCM Args) -> TCM Term
   defaultResult' mk = do
     (f, t0) <- inferHead hd
+      -- Jesper, 2022-12-15, #6406: see comment in `inferApplication`
+    (f, t0, args) <- case hd of
+      A.Proj{} | not (null args), not (checkForParams args) -> do
+        (ws, t0) <- workOnTypes $ implicitArgs (-1) (not . visible) t0
+        let args' = dropWhile (not . visible) args
+        return (f . (map Apply ws ++) , t0, args')
+      _ -> return (f, t0, args)
     expandLast <- asksTC envExpandLast
     checkArguments cmp expandLast (getRange hd) args t0 t $ \ st@(ACState rs vs _ t1 checkedTarget) -> do
       let check = do
@@ -1056,20 +1075,9 @@ checkConstructorApplication cmp org t c args = do
   where
     fallback = checkHeadApplication cmp org t (A.Con (unambiguous $ conName c)) args
 
-    -- Check if there are explicitly given hidden arguments,
-    -- in which case we fall back to default type checking.
-    -- We could work harder, but let's not for now.
-    --
-    -- Andreas, 2012-04-18: if all inital args are underscores, ignore them
-    checkForParams args =
-      let (hargs, rest) = break visible args
-          notUnderscore A.Underscore{} = False
-          notUnderscore _              = True
-      in  any (notUnderscore . unScope . namedArg) hargs
-
     -- Drop the constructor arguments that correspond to parameters.
     dropArgs [] args                = args
-    dropArgs ps []                  = args
+    dropArgs ps []                  = []
     dropArgs ps args@(arg : args')
       | Just p   <- name,
         Just ps' <- namedPar p ps   = dropArgs ps' args'
@@ -1086,6 +1094,18 @@ checkConstructorApplication cmp org t c args = do
         dropPar this (p : ps) | this p    = Just ps
                               | otherwise = dropPar this ps
         dropPar _ [] = Nothing
+
+-- Check if there are explicitly given hidden arguments,
+-- in which case we fall back to default type checking.
+-- We could work harder, but let's not for now.
+--
+-- Andreas, 2012-04-18: if all inital args are underscores, ignore them
+checkForParams :: [NamedArg A.Expr] -> Bool
+checkForParams args =
+  let (hargs, rest) = break visible args
+      notUnderscore A.Underscore{} = False
+      notUnderscore _              = True
+  in  any (notUnderscore . unScope . namedArg) hargs
 
 -- | Return an unblocking action in case of failure.
 type DisambiguateConstructor = TCM (Either Blocker ConHead)

@@ -10,5 +10,4 @@ No instance of type Semiring Nat was found in scope.
   a != c of type Nat
   when checking that the expression refl has type
   (ringNat Semiring.+ a) c ≡ (c +N a)
-when checking that a c are valid arguments to a function of type
-{A : Set} ⦃ r : Semiring A ⦄ → A → A → A
+when checking that the expression a + c has type Nat
