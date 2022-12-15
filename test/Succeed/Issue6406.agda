@@ -1,3 +1,4 @@
+
 record R (A : Set) : Set where
   field
     x : A
