@@ -13,6 +13,8 @@
 
 module Agda.TypeChecking.MetaVars.Occurs where
 
+import Prelude hiding (null)
+
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -54,8 +56,10 @@ import Agda.Utils.Lens
 import Agda.Utils.List (downFrom)
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
+import Agda.Utils.Null
 import Agda.Utils.Permutation
 import Agda.Utils.Pretty (prettyShow)
+import Agda.Utils.Singleton
 import Agda.Utils.Size
 
 import Agda.Utils.Impossible
@@ -145,6 +149,9 @@ data OccursExtra = OccursExtra
 
 type OccursCtx  = FreeEnv' () OccursExtra AllowedVar
 type OccursM    = ReaderT OccursCtx TCM
+
+runOccurs :: UnfoldStrategy -> OccursCtx -> OccursM a -> TCM a
+runOccurs s e f = withUnfoldStrategy s $ runReaderT f e
 
 -- ** Modality handling.
 
@@ -286,6 +293,10 @@ allowedVars = do
 data UnfoldStrategy = YesUnfold | NoUnfold
   deriving (Eq, Show)
 
+withUnfoldStrategy :: MonadTCEnv m => UnfoldStrategy -> m a -> m a
+withUnfoldStrategy YesUnfold = id
+withUnfoldStrategy NoUnfold = putAllowedReductions $ singleton ProjectionReductions
+
 defArgs :: OccursM a -> OccursM a
 defArgs m = asks (occUnfold . feExtra) >>= \case
   NoUnfold  -> flexibly m
@@ -299,19 +310,6 @@ conArgs es m = asks (occUnfold . feExtra) >>= \case
   NoUnfold | null [ () | IApply{} <- es ]
             -> m
   NoUnfold  -> flexibly m
-
-unfoldB :: (Instantiate t, Reduce t) => t -> OccursM (Blocked t)
-unfoldB v = do
-  unfold <- asks $ occUnfold . feExtra
-  rel    <- asks feModality
-  case unfold of
-    YesUnfold | not (isIrrelevant rel) -> reduceB v
-    _                                  -> notBlocked <$> instantiate v
-
-unfold :: (Instantiate t, Reduce t) => t -> OccursM t
-unfold v = asks (occUnfold . feExtra) >>= \case
-  NoUnfold  -> instantiate v
-  YesUnfold -> reduce v
 
 -- ** Managing rigidiy during occurs check.
 
@@ -392,15 +390,11 @@ occursCheck m xs v cmpAs = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
   initOccursCheck mv
   nicerErrorMessage $ do
     -- First try without normalising the term
-    (occurs v ty `runReaderT` initEnv NoUnfold) `catchError` \err -> do
-      -- If first run is inconclusive, try again with normalization
-      -- (unless metavariable is irrelevant, in which case the
-      -- constraint will anyway be dropped)
-      case err of
-        PatternErr{} | not (isIrrelevant $ getModality mv) -> do
-          initOccursCheck mv
-          occurs v ty `runReaderT` initEnv YesUnfold
-        _ -> throwError err
+    (runOccurs NoUnfold (initEnv NoUnfold) (occurs v ty)) `catchError` \err -> do
+      -- If first run is inconclusive or fails with a type error,
+      -- try again with normalization
+      initOccursCheck mv
+      runOccurs YesUnfold (initEnv YesUnfold) (occurs v ty)
 
   where
     -- Produce nicer error messages
@@ -455,7 +449,7 @@ occursCheck m xs v cmpAs = Bench.billTo [ Bench.Typing, Bench.OccursCheck ] $ do
 
 instance Occurs Term where
   occurs v ty = do
-    vb  <- unfoldB v
+    vb  <- reduceB v
     singTy <- runBlocked $ isSingletonType ty
     let tyBlock = fromLeft (const neverUnblock) singTy
         block = unblockOnEither (getBlocker vb) tyBlock
@@ -516,14 +510,14 @@ instance Occurs Term where
             definitionCheck (conName c)
             reportSDoc "tc.meta.occurs" 45 $ "occursCheck: constructor at type" <+> prettyTCM ty
             let fail = do
-                  reportSDoc "impossible" 10 $ vcat
+                  reportSDoc "tc.meta.occurs" 10 $ vcat
                     [ "Bad type for constructor" <+> prettyTCM c <+> ":"
                     , nest 2 $ prettyTCM ty
                     ]
                   -- Jesper, 2023-03-01: this should really be __IMPOSSIBLE__, but
                   -- currently it is not due to primPOr.
                   -- (see https://github.com/agda/agda/issues/5837#issuecomment-1448757002)
-                  patternViolation neverUnblock
+                  patternViolation alwaysUnblock
             (_, ct) <- typeLevelReductions $ fromMaybeM fail (getConType c ty)
             Con c ci <$> conArgs vs (occurs vs (ct , Con c ci))  -- if strongly rigid, remain so, except with unreduced IApply arguments.
           Pi a b      -> Pi <$> occurs_ a <*> occurs b a
@@ -642,7 +636,7 @@ instance Occurs Type where
 
 instance Occurs Sort where
   occurs s _ = do
-    unfold s >>= \case
+    reduce s >>= \case
       PiSort a s1 s2 -> do
         s1' <- flexibly $ occurs_ s1
         a'  <- (a $>) <$> do flexibly $ occurs (unDom a) (sort s1')

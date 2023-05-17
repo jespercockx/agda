@@ -4836,6 +4836,11 @@ runReduceM m = TCM $ \ r e -> do
   --   s <- getTC
   --   return $! unReduceM m (ReduceEnv e s)
 
+runReduceMLazy :: ReduceM a -> TCM a
+runReduceMLazy m = TCM $ \ r e -> do
+  s <- readIORef r
+  return $ unReduceM m $ ReduceEnv e s Nothing
+
 runReduceF :: (a -> ReduceM b) -> TCM (a -> b)
 runReduceF f = do
   e <- askTC

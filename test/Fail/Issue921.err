@@ -1,10 +1,10 @@
 Issue921.agda:49,1-117,17
 Termination checking failed for the following functions:
-  pullback, _○_, pullback-var
+  pullback, _○_
 Problematic calls:
   pullback x m
     (at Issue921.agda:96,81-89)
-  weaken Δ ○ snd xtc.eq ms
+  weaken (_Δ_501 (Δ' = Δ') (fst = fst₁) (T = T) (p = p)) ○
+  _snd_457 (A = (_A_502 (Δ' = Δ') (fst = fst₁) (T = T) (p = p)))
+  (T = (_T_503 (Δ' = Δ') (fst = fst₁) (T = T) (p = p))) ms
     (at Issue921.agda:98,80-81)
-  pullback-var
-    (at Issue921.agda:108,99-111)
