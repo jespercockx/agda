@@ -1,5 +1,5 @@
 Failed to solve the following constraints:
-  (x : _47) → _47 =< _A_56 (ff≡f = ff≡f) (blocked on _A_56)
+  f = _y_60 : _X_51 ⇒ _X_51 (blocked on any(_53, _y_60))
   λ x → f (f x) = _x_59 : _X_51 ⇒ _X_51 (blocked on _x_59)
   (x : _47) → _47 = _A_56 : Set (blocked on _A_56)
   _47 =< _47 (blocked on any(_47, _X_51))

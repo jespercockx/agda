@@ -43,6 +43,7 @@ import Agda.TypeChecking.Level (levelType)
 import Agda.TypeChecking.Records
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Irrelevance
+import Agda.TypeChecking.Datatypes
 import Agda.TypeChecking.EtaContract
 import Agda.TypeChecking.SizedTypes (boundedSizeMetaHook, isSizeProblem)
 import {-# SOURCE #-} Agda.TypeChecking.CheckInternal
@@ -1005,7 +1006,7 @@ assign dir x args v target = addOrUnblocker (unblockOnMeta x) $ do
 
       -- Check that the arguments are variables
       mids <- do
-        res <- runExceptT $ inverseSubst' (const False) args
+        res <- runExceptT $ inverseSubst' (const False) args t
         case res of
           -- all args are variables
           Right ids -> do
@@ -1610,8 +1611,8 @@ data InvertExcept
   | NeutralArg                -- ^ A potentially neutral arg: can't invert, but can try pruning.
   | ProjVar ProjectedVar      -- ^ Try to eta-expand var to remove projs.
 
--- | Check that arguments @args@ to a metavar are in pattern fragment.
---   Assumes all arguments already in whnf and eta-reduced.
+-- | Check that arguments @args@ to a metavar of type @t@ are in pattern fragment.
+--   Assumes all arguments already in whnf.
 --   Parameters are represented as @Var@s so @checkArgs@ really
 --   checks that all args are @Var@s and returns the "substitution"
 --   to be applied to the rhs of the equation to solve.
@@ -1621,11 +1622,17 @@ data InvertExcept
 --   Linearity, i.e., whether the substitution is deterministic,
 --   has to be checked separately.
 --
-inverseSubst' :: (Term -> Bool) -> Args -> ExceptT InvertExcept TCM SubstCand
-inverseSubst' skip args = map (mapFst unArg) <$> loop (zip args terms)
+inverseSubst' :: (Term -> Bool) -> Args -> Type -> ExceptT InvertExcept TCM SubstCand
+inverseSubst' skip args ty = map (mapFst unArg) <$> loop (zip args vars) [] ty
   where
-  loop  = foldM isVarOrIrrelevant []
-  terms = map var (downFrom (size args))
+  loop :: [(Arg Term, Term)] -> Res -> Type -> ExceptT InvertExcept TCM Res
+  loop []          res ty = return res
+  loop ((u,v):uvs) res ty = ifNotPiOrPathType ty (\_ -> failure $ unArg u) $ \a b -> do
+    res' <- isVarOrIrrelevant res u v a
+    loop uvs res' $ absApp b (unArg u)
+
+  vars = map var $ downFrom (size args)
+
   failure c = do
     lift $ reportSDoc "tc.meta.assign" 15 $ vcat
       [ "not all arguments are variables: " <+> prettyTCM args
@@ -1633,15 +1640,16 @@ inverseSubst' skip args = map (mapFst unArg) <$> loop (zip args terms)
     throwError (CantInvert c)
   neutralArg = throwError NeutralArg
 
-  isVarOrIrrelevant :: Res -> (Arg Term, Term) -> ExceptT InvertExcept TCM Res
-  isVarOrIrrelevant vars (Arg info v, t) = do
-    let irr | isIrrelevant info = True
-            | DontCare{} <- v   = True
-            | otherwise         = False
+  isVarOrIrrelevant :: Res -> Arg Term -> Term -> Dom Type -> ExceptT InvertExcept TCM Res
+  isVarOrIrrelevant vars (Arg info v) t dom = do
+    let ty = unDom dom
+    mi  <- isEtaVar v ty
+    -- i := x
+    ifJustM (isEtaVar v ty) (\i -> return $ (Arg info i, t) `cons` vars) $ do
+    let isDontCare DontCare{} = True
+        isDontCare _          = False
+    irr <- runBlocked $ pure (isDontCare v) `or2M` isIrrelevantOrPropM dom
     case stripDontCare v of
-      -- i := x
-      Var i [] -> return $ (Arg info i, t) `cons` vars
-
       -- π i := x  try to eta-expand projection π away!
       Var i es | Just qs <- mapM isProjElim es ->
         throwError $ ProjVar $ ProjectedVar i qs
@@ -1649,17 +1657,18 @@ inverseSubst' skip args = map (mapFst unArg) <$> loop (zip args terms)
       -- (i, j) := x  becomes  [i := fst x, j := snd x]
       -- Andreas, 2013-09-17 but only if constructor is fully applied
       tm@(Con c ci es) -> do
-        let fallback
-             | isIrrelevant info = return vars
-             | skip tm           = return vars
-             | otherwise         = failure tm
+        let fallback | irr == Right True = return vars
+                     | skip tm           = return vars
+                     | otherwise         = failure tm
         irrProj <- optIrrelevantProjections <$> pragmaOptions
+        mcty <- runBlocked $ getConType c ty
         lift (isRecordConstructor $ conName c) >>= \case
           Just (_, r@Record{ recFields = fs })
             | YesEta <- recEtaEquality r  -- Andreas, 2019-11-10, issue #4185: only for eta-records
             , length fs == length es
             , hasQuantity0 info || all usableQuantity fs     -- Andreas, 2019-11-12/17, issue #4168b
-            , irrProj || all isRelevant fs -> do
+            , irrProj || all isRelevant fs
+            , Right (Just (_, cty)) <- mcty -> do
               let aux (Arg _ v) Dom{domInfo = info', unDom = f} =
                     (Arg ai v,) $ t `applyE` [Proj ProjSystem f]
                     where
@@ -1675,13 +1684,11 @@ inverseSubst' skip args = map (mapFst unArg) <$> loop (zip args terms)
                       , argInfoAnnotation    = argInfoAnnotation info'
                       }
                   vs = fromMaybe __IMPOSSIBLE__ $ allApplyElims es
-              res <- loop $ zipWith aux vs fs
-              return $ res `append` vars
-            | otherwise -> fallback
+              loop (zipWith aux vs fs) vars cty
           _ -> fallback
 
       -- An irrelevant argument which is not an irrefutable pattern is dropped
-      _ | irr -> return vars
+      _ | irr == Right True -> return vars
 
       -- Distinguish args that can be eliminated (Con,Lit,Lam,unsure) ==> failure
       -- from those that can only put somewhere as a whole ==> neutralArg
@@ -1752,7 +1759,7 @@ isFaceConstraint mid args = runMaybeT $ do
   -- We must check the "face condition" (the relaxed pattern condition)
   -- and check linearity of the substitution candidate, otherwise the
   -- equation can't be inverted into a face constraint.
-  sub <- MaybeT $ either (const Nothing) Just <$> runExceptT (inverseSubst' isEndpoint args)
+  sub <- MaybeT $ either (const Nothing) Just <$> runExceptT (inverseSubst' isEndpoint args __DUMMY_TYPE__)
   ids <- MaybeT $ either (const Nothing) Just <$> runExceptT (checkLinearity sub)
 
   m           <- getContextSize

@@ -1,5 +1,4 @@
-Failed to solve the following constraints:
-  _8 (A = A) _ = x : A (blocked on _8)
-Unsolved metas at the following locations:
-  UnifyWithIrrelevantArgument.agda:9,16-17
-  UnifyWithIrrelevantArgument.agda:11,12-16
+UnifyWithIrrelevantArgument.agda:11,12-16
+Cannot instantiate the metavariable _8 to solution x
+since (part of) the solution was created in an irrelevant context
+when checking that the expression refl has type _8 (A = A) _ ≡ x

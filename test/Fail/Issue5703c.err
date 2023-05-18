@@ -1,0 +1,4 @@
+Issue5703c.agda:19,14-18
+Cannot instantiate the metavariable _6 to solution C b A
+since (part of) the solution was created in an erased context
+when checking that the expression refl has type Z b ≡ C b A

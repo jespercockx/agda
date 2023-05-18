@@ -73,9 +73,9 @@ insertImplicitPatternsT exh            ps a = do
          ]
   reportSDoc "tc.lhs.imp" 70 $
     vcat [ "insertImplicitPatternsT"
-         , nest 2 $ "ps  = " <+> (text . show) ps
-         , nest 2 $ "tel = " <+> (text . show) tel
-         , nest 2 $ "b   = " <+> (text . show) b
+         , nest 2 $ "ps  = " <+> prettyA ps
+         , nest 2 $ "tel = " <+> pretty tel
+         , nest 2 $ "b   = " <+> pretty b
          ]
   case ps of
     [] -> insImp dummy tel

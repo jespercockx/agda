@@ -1,4 +1,4 @@
-Failed to solve the following constraints:
-  _x_5 = x : A (blocked on _x_5)
-Unsolved metas at the following locations:
-  Issue875.agda:8,7-8
+Issue875.agda:8,7-8
+Cannot instantiate the metavariable _x_5 to solution x
+since (part of) the solution was created in an irrelevant context
+when checking that the expression f has type P x
