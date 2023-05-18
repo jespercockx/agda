@@ -502,9 +502,9 @@ instance Occurs Term where
               let erasedModality = setQuantity zeroQuantity unitModality
                   irrelevantErasedModality = setRelevance Irrelevant erasedModality
               erasedOk <- getAll . ($ erasedModality) <$> variable i
-              when erasedOk $ strongly $ abort neverUnblock $ MetaErasedSolution m $ var i
+              when erasedOk $ abort neverUnblock $ MetaErasedSolution m $ var i
               irrelevantOk <- getAll . ($ irrelevantErasedModality) <$> variable i
-              when irrelevantOk $ strongly $ abort neverUnblock $ MetaIrrelevantSolution m $ var i
+              when irrelevantOk $ abort neverUnblock $ MetaIrrelevantSolution m $ var i
               strongly $ abort neverUnblock $ MetaCannotDependOn m i
           Lam h f     -> do
             ab <- shouldBePiOrPath ty
@@ -659,6 +659,7 @@ instance Occurs Sort where
       SSet a     -> SSet <$> occurs_ a
       s@SizeUniv -> return s
       s@LockUniv -> return s
+      s@LevelUniv -> return s
       s@IntervalUniv -> return s
       UnivSort s -> UnivSort <$> do flexibly $ occurs_ s
       MetaS x es -> do
@@ -683,6 +684,7 @@ instance Occurs Sort where
       SSet a     -> metaOccurs m a
       SizeUniv   -> return ()
       LockUniv   -> return ()
+      LevelUniv  -> return ()
       IntervalUniv -> return ()
       UnivSort s -> metaOccurs m s
       MetaS x es -> metaOccurs m $ MetaV x es
@@ -913,6 +915,7 @@ instance AnyRigid Sort where
       SSet l     -> anyRigid f l
       SizeUniv   -> return False
       LockUniv   -> return False
+      LevelUniv  -> return False
       IntervalUniv -> return False
       PiSort a s1 s2 -> return False
       FunSort s1 s2 -> return False

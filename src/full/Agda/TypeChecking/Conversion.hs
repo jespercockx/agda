@@ -1011,7 +1011,7 @@ compareElims pols0 fors0 a v els01 els02 =
 
     -- case: f == f' are projections
     (Proj o f : els1, Proj _ f' : els2)
-      | f /= f'   -> typeError . GenericDocError =<< prettyTCM f <+> "/=" <+> prettyTCM f'
+      | f /= f'   -> typeError $ MismatchedProjectionsError f f'
       | otherwise -> do
         a   <- abortIfBlocked a
         res <- projectTyped v a o f -- fails only if f is proj.like but parameters cannot be retrieved
@@ -1309,16 +1309,17 @@ leqSort s1 s2 = do
       (SSet{}  , Inf IsStrict _) -> yes
       (SSet{}  , Inf IsFibrant _) -> no
 
-      -- @LockUniv@, @IntervalUniv@, @SizeUniv@, and @Prop0@ are bottom sorts.
+      -- @LockUniv@, @LevelUniv@, @IntervalUniv@, @SizeUniv@, and @Prop0@ are bottom sorts.
       -- So is @Set0@ if @Prop@ is not enabled.
       (_       , LockUniv) -> equalSort s1 s2
+      (_       , LevelUniv) -> equalSort s1 s2
       (_       , IntervalUniv) -> equalSort s1 s2
       (_       , SizeUniv) -> equalSort s1 s2
       (_       , Prop (Max 0 [])) -> equalSort s1 s2
       (_       , Type (Max 0 []))
         | not propEnabled  -> equalSort s1 s2
 
-      -- @SizeUniv@ and @LockUniv@ are unrelated to any @Set l@ or @Prop l@
+      -- @SizeUniv@, @LockUniv@ and @LevelUniv@ are unrelated to any @Set l@ or @Prop l@
       (SizeUniv, Type{}  ) -> no
       (SizeUniv, Prop{}  ) -> no
       (SizeUniv , Inf{}  ) -> no
@@ -1327,6 +1328,10 @@ leqSort s1 s2 = do
       (LockUniv, Prop{}  ) -> no
       (LockUniv , Inf{}  ) -> no
       (LockUniv, SSet{}  ) -> no
+      (LevelUniv, Type{}  ) -> no
+      (LevelUniv, Prop{}  ) -> no
+      (LevelUniv , Inf{}  ) -> no
+      (LevelUniv, SSet{}  ) -> no
 
       -- @IntervalUniv@ is below @SSet l@, but not @Set l@ or @Prop l@
       (IntervalUniv, Type{}) -> no
@@ -1733,6 +1738,7 @@ equalSort s1 s2 = do
             (Type a     , Type b     ) -> equalLevel a b `catchInequalLevel` no
             (SizeUniv   , SizeUniv   ) -> yes
             (LockUniv   , LockUniv   ) -> yes
+            (LevelUniv   , LevelUniv   ) -> yes
             (IntervalUniv , IntervalUniv) -> yes
             (Prop a     , Prop b     ) -> equalLevel a b `catchInequalLevel` no
             (Inf f m    , Inf f' n   ) ->
@@ -1816,9 +1822,10 @@ equalSort s1 s2 = do
             infInInf <- (optOmegaInOmega <$> pragmaOptions) `or2M` typeInType
             if | infInInf  -> equalSort (Inf f 0) s2
                | otherwise -> no
-          -- @Prop l@ and @SizeUniv@ are not successor sorts
+          -- @Prop l@, @SizeUniv@ and @LevelUniv@ are not successor sorts
           Prop{}     -> no
           SizeUniv{} -> no
+          LevelUniv{} -> no
           -- Anything else: postpone
           _          -> postpone
 
@@ -1918,6 +1925,7 @@ equalSort s1 s2 = do
                    Left _  -> patternViolation blocker
           -- We have @SizeUniv == funSort s1 s2@ iff @s2 == SizeUniv@
           SizeUniv -> equalSort SizeUniv s2
+          LevelUniv -> equalSort LevelUniv s2
           -- Anything else: postpone
           _        -> postpone
 

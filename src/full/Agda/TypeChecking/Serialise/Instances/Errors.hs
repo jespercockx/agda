@@ -34,6 +34,7 @@ instance EmbPrj Warning where
     UnsolvedMetaVariables a               -> __IMPOSSIBLE__
     UnsolvedInteractionMetas a            -> __IMPOSSIBLE__
     UnsolvedConstraints a                 -> __IMPOSSIBLE__
+    InteractionMetaBoundaries a           -> __IMPOSSIBLE__
     OldBuiltin a b                        -> icodeN 1 OldBuiltin a b
     EmptyRewritePragma                    -> icodeN 2 EmptyRewritePragma
     UselessPublic                         -> icodeN 3 UselessPublic
@@ -293,12 +294,12 @@ instance EmbPrj InfectiveCoinfective where
 
 instance EmbPrj PragmaOptions where
   icod_ = \case
-    PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll ->
-      icodeN' PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll
+    PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm ->
+      icodeN' PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm
 
   value = vcase $ \case
-    [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc, dd, ee, ff, gg, hh, ii, jj, kk, ll, mm, nn, oo, pp, qq, rr, ss, tt, uu, vv, ww, xx, yy, zz, aaa, bbb, ccc, ddd, eee, fff, ggg, hhh, iii, jjj, kkk, lll] ->
-      valuN PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll
+    [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc, dd, ee, ff, gg, hh, ii, jj, kk, ll, mm, nn, oo, pp, qq, rr, ss, tt, uu, vv, ww, xx, yy, zz, aaa, bbb, ccc, ddd, eee, fff, ggg, hhh, iii, jjj, kkk, lll, mmm] ->
+      valuN PragmaOptions a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt uu vv ww xx yy zz aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm
     _ -> malformed
 
 instance EmbPrj ProfileOptions where
@@ -430,6 +431,7 @@ instance EmbPrj WarningName where
     TooManyFieldsWarning_                        -> 94
     OptionRenamed_                               -> 95
     PlentyInHardCompileTimeMode_                 -> 96
+    InteractionMetaBoundaries_                   -> 97
 
   value = \case
     0  -> return OverlappingTokensWarning_
@@ -529,6 +531,7 @@ instance EmbPrj WarningName where
     94 -> return TooManyFieldsWarning_
     95 -> return OptionRenamed_
     96 -> return PlentyInHardCompileTimeMode_
+    97 -> return InteractionMetaBoundaries_
     _ -> malformed
 
 

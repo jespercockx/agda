@@ -24,7 +24,7 @@ module Agda.TypeChecking.Errors
 import Prelude hiding ( null, foldl )
 
 import qualified Control.Exception as E
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), (<=<))
 import Control.Monad.Except
 
 import qualified Data.CaseInsensitive as CaseInsens
@@ -270,6 +270,9 @@ errorString err = case err of
   InstanceSearchDepthExhausted{}           -> "InstanceSearchDepthExhausted"
   TriedToCopyConstrainedPrim{}             -> "TriedToCopyConstrainedPrim"
   SortOfSplitVarError{}                    -> "SortOfSplitVarError"
+  ReferencesFutureVariables{}              -> "ReferencesFutureVariables"
+  DoesNotMentionTicks{}                    -> "DoesNotMentionTicks"
+  MismatchedProjectionsError{}             -> "MismatchedProjectionsError"
 
 instance PrettyTCM TCErr where
   prettyTCM err = case err of
@@ -509,7 +512,7 @@ instance PrettyTCM TypeError where
 
     NotAProperTerm -> fwords "Found a malformed term"
 
-    InvalidTypeSort s -> fsep $ prettyTCM s : pwords "is not a valid type"
+    InvalidTypeSort s -> fsep $ prettyTCM s : pwords "is not a valid sort"
     InvalidType v -> fsep $ prettyTCM v : pwords "is not a valid type"
 
     FunctionTypeInSizeUniv v -> fsep $
@@ -1215,7 +1218,65 @@ instance PrettyTCM TypeError where
 
     TriedToCopyConstrainedPrim q -> fsep $
       pwords "Cannot create a module containing a copy of" ++ [prettyTCM q]
+
     SortOfSplitVarError _ doc -> return doc
+
+    ReferencesFutureVariables term (disallowed :| _) lock leftmost
+      | disallowed == leftmost
+      -> fsep $ pwords "The lock variable"
+             ++ pure (prettyTCM =<< nameOfBV disallowed)
+             ++ pwords "can not appear simultaneously in the \"later\" term"
+             ++ pure (prettyTCM term)
+             ++ pwords "and in the lock term"
+             ++ pure (prettyTCM lock <> ".")
+
+    ReferencesFutureVariables term (disallowed :| rest) lock leftmost -> do
+      explain <- (/=) <$> prettyTCM lock <*> (prettyTCM =<< nameOfBV leftmost)
+      let
+        name = prettyTCM =<< nameOfBV leftmost
+        mod = case getLock lock of
+          IsLock LockOLock -> "@lock"
+          IsLock LockOTick -> "@tick"
+          _ -> __IMPOSSIBLE__
+      vcat $ concat
+        [ pure . fsep $ concat
+          [ pwords "The variable", pure (prettyTCM =<< nameOfBV disallowed), pwords "can not be mentioned here,"
+          , pwords "since it was not introduced before the variable", pure (name <> ".")
+          ]
+        , [ fsep ( pwords "Variables introduced after"
+                ++ pure name
+                ++ pwords "can not be used, since that is the leftmost" ++ pure mod ++ pwords "variable in the locking term"
+                ++ pure (prettyTCM lock <> "."))
+          | explain
+          ]
+        , [ fsep ( pwords "The following"
+                  ++ P.singPlural rest (pwords "variable is") (pwords "variables are")
+                  ++ pwords "not allowed here, either:"
+                  ++ punctuate comma (map (prettyTCM <=< nameOfBV) rest))
+          | not (null rest)
+          ]
+        ]
+
+    DoesNotMentionTicks term ty lock ->
+      let
+        mod = case getLock lock of
+          IsLock LockOLock -> "@lock"
+          IsLock LockOTick -> "@tick"
+          _ -> __IMPOSSIBLE__
+      in
+        vcat
+        [ fsep $
+            pwords "The term"
+            ++ [prettyTCM lock <> ","]
+            ++ pwords "given as an argument to the guarded value"
+        , nest 2 (prettyTCM term <+> ":" <+> prettyTCM ty)
+        , fsep (pwords ("can not be used as a " ++ mod ++ " argument, since it does not mention any " ++ mod ++ " variables."))
+        ]
+
+    MismatchedProjectionsError left right -> fsep $
+      pwords "The projections" ++ [prettyTCM left] ++
+      pwords "and" ++ [prettyTCM right] ++
+      pwords "do not match"
 
     where
     mpar n args

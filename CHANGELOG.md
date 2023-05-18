@@ -11,6 +11,39 @@ Reflection
   pragmaCompile : String → Name → String → TC ⊤
   ```
 
+
+* Add 4 reflection primitives of the form `ask*` and `with*`:
+
+  ```agda
+  withNormalisation : ∀ {a} {A : Set a} → Bool → TC A → TC A
+  askNormalisation  : TC Bool
+
+  withExpandLast : ∀ {a} {A : Set a} → Bool → TC A → TC A
+  askExpandLast  : TC Bool
+
+  withReduceDefs : ∀ {a} {A : Set a} → (Σ Bool λ _ → List Name) → TC A → TC A
+  askReduceDefs  : TC (Σ Bool λ _ → List Name)
+
+  askReconstructed  : TC Bool
+  ```
+  to change the behaviour of `inferType`, `checkType`, `quoteTC`, `getContext`.
+
+* [**Breaking**] The type of `withReconstructed` has been changed from
+
+  ```agda
+  withReconstructed : ∀ {a} {A : Set a} →        TC A → TC A
+
+  ```
+  to
+  ```agda
+  withReconstructed : ∀ {a} {A : Set a} → Bool → TC A → TC A
+  ```
+  to match the type of primitives of the form `with*`.
+
+* Two primitives `onlyReduceDefs` and `dontReduceDefs` are removed but re-implemented
+  using the new family of primitives `with*` and `ask*` for backward compatibility.
+
+
 Erasure
 -------
 
@@ -157,6 +190,11 @@ Erasure
   names can be used in the application, as in the definition of `N`
   above.
 
+* Equivalence primitives no longer require full `--cubical` mode,
+  `--erased-cubical` suffices. Equivalence definition is moved out of
+  `Agda.Builtin.Cubical.Glue` into its own module `Agda.Builtin.Cubical.Equiv`,
+  the former reexports the latter.
+
 Syntax
 ------
 
@@ -188,6 +226,11 @@ Instance arguments
 Pragmas and options
 -------------------
 
+* New command-line option `--numeric-version` to just print the version number of Agda.
+
+* Option `--version` now also prints the cabal flags active in this build of Agda
+  (e.g. whether Agda was built with `-f enable-cluster-counting`).
+
 * New command-line option `--trace-imports` to switch on notification messages
   on the end of compilation of an imported module
   or on access to an interface file during the type-checking.
@@ -204,6 +247,11 @@ Pragmas and options
 
 * Benign warnings are now printed together with their warning name, to give a hint how they can be disabled
   (see [#6229](https://github.com/agda/agda/issues/6229)).
+
+* New option `--level-universe` to make `Level` inhabit its own universe `LevelUniv`:
+  When this option is turned on, `Level` can now only depend on terms of type `Level`.
+
+  Note: While compatible with the `--cubical` option, this option is currently not compatible with cubical builtin files, and an error will be raised when trying to import them in a file using `--level-universe`.
 
 Library management
 ------------------
@@ -225,3 +273,20 @@ Emacs mode
 * Helper function (`C-c C-h`) does not abstract over module parameters anymore
   (see [#2271](https://github.com/agda/agda/issues/2271)).
 
+* New Agda input mode prefix `box` for APL boxed operators, e.g. `\box=` for ⌸;
+  see PR [#6510](https://github.com/agda/agda/pull/6510/files) for full list of bindings.
+
+Cubical Agda
+------------
+
+* Cubical Agda will now report boundary information for interaction
+  points which are not at the top-level of their respective clauses.
+  This includes bodies of `Path`-typed values, the faces of a partial
+  element, arguments to functions returning paths, etc.
+
+  Since this information is available in a structured way _during
+  interaction_, the "goal type, context, and inferred type" command will
+  also display the value of the expression at each relevant face.
+
+  See also [PR #6529](https://github.com/agda/agda/pull/6529) for a
+  deeper explanation and a demo video.

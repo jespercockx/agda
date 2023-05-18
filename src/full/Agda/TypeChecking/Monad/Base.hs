@@ -1640,12 +1640,13 @@ instance LensIsAbstract MetaInfo where
 --   The meta variable is created by the type checker and then hooked up to the
 --   interaction point.
 data InteractionPoint = InteractionPoint
-  { ipRange :: Range        -- ^ The position of the interaction point.
-  , ipMeta  :: Maybe MetaId -- ^ The meta variable, if any, holding the type etc.
-  , ipSolved:: Bool         -- ^ Has this interaction point already been solved?
-  , ipClause:: IPClause
-      -- ^ The clause of the interaction point (if any).
-      --   Used for case splitting.
+  { ipRange    :: Range        -- ^ The position of the interaction point.
+  , ipMeta     :: Maybe MetaId -- ^ The meta variable, if any, holding the type etc.
+  , ipSolved   :: Bool         -- ^ Has this interaction point already been solved?
+  , ipClause   :: IPClause
+    -- ^ The clause of the interaction point (if any).
+    --   Used for case splitting.
+  , ipBoundary :: IPBoundary
   }
   deriving Generic
 
@@ -1670,11 +1671,13 @@ data Overapplied = Overapplied | NotOverapplied
 
 -- | Datatype representing a single boundary condition:
 --   x_0 = u_0, ... ,x_n = u_n ⊢ t = ?n es
-data IPBoundary' t = IPBoundary
-  { ipbEquations :: [(t,t)] -- ^ [x_0 = u_0, ... ,x_n = u_n]
-  , ipbValue     :: t          -- ^ @t@
-  , ipbMetaApp   :: t          -- ^ @?n es@
-  , ipbOverapplied :: Overapplied -- ^ Is @?n@ overapplied in @?n es@ ?
+data IPFace' t = IPFace'
+  { faceEqns :: [(t, t)]
+  , faceRHS  :: t
+  }
+
+newtype IPBoundary' t = IPBoundary
+  { getBoundary :: Map (IntMap Bool) t
   }
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
@@ -1688,14 +1691,13 @@ data IPClause = IPClause
   , ipcWithSub  :: Maybe Substitution -- ^ Module parameter substitution
   , ipcClause   :: A.SpineClause      -- ^ The original AST clause.
   , ipcClosure  :: Closure ()         -- ^ Environment for rechecking the clause.
-  , ipcBoundary :: [Closure IPBoundary] -- ^ The boundary imposed by the LHS.
   }
   | IPNoClause -- ^ The interaction point is not in the rhs of a clause.
   deriving (Generic)
 
 instance Eq IPClause where
   IPNoClause           == IPNoClause             = True
-  IPClause x i _ _ _ _ _ == IPClause x' i' _ _ _ _ _ = x == x' && i == i'
+  IPClause x i _ _ _ _ == IPClause x' i' _ _ _ _ = x == x' && i == i'
   _                    == _                      = False
 
 ---------------------------------------------------------------------------
@@ -1894,6 +1896,7 @@ data NLPSort
   | PInf IsFibrant Integer
   | PSizeUniv
   | PLockUniv
+  | PLevelUniv
   | PIntervalUniv
   deriving (Show, Generic)
 
@@ -1905,6 +1908,7 @@ instance TermLike NLPSort where
     s@PInf{}          -> return s
     s@PSizeUniv{}     -> return s
     s@PLockUniv{}     -> return s
+    s@PLevelUniv{}    -> return s
     s@PIntervalUniv{} -> return s
 
   foldTerm f t = case t of
@@ -1914,6 +1918,7 @@ instance TermLike NLPSort where
     s@PInf{}          -> mempty
     s@PSizeUniv{}     -> mempty
     s@PLockUniv{}     -> mempty
+    s@PLevelUniv{}    -> mempty
     s@PIntervalUniv{} -> mempty
 
 instance AllMetas NLPSort
@@ -3955,10 +3960,14 @@ data Warning
   -- ^ `CoverageIssue f pss` means that `pss` are not covered in `f`
   | CoverageNoExactSplit     QName [Clause]
   | NotStrictlyPositive      QName (Seq OccursWhere)
+
   | UnsolvedMetaVariables    [Range]  -- ^ Do not use directly with 'warning'
   | UnsolvedInteractionMetas [Range]  -- ^ Do not use directly with 'warning'
   | UnsolvedConstraints      Constraints
     -- ^ Do not use directly with 'warning'
+  | InteractionMetaBoundaries [Range]
+    -- ^ Do not use directly with 'warning'
+
   | CantGeneralizeOverSorts [MetaId]
   | AbsurdPatternRequiresNoRHS [NamedArg DeBruijnPattern]
   | OldBuiltin               String String
@@ -4112,6 +4121,7 @@ warningName = \case
   GenericUseless{}             -> GenericUseless_
   GenericWarning{}             -> GenericWarning_
   InversionDepthReached{}      -> InversionDepthReached_
+  InteractionMetaBoundaries{}  -> InteractionMetaBoundaries_{}
   ModuleDoesntExport{}         -> ModuleDoesntExport_
   NoGuardednessFlag{}          -> NoGuardednessFlag_
   NotInScopeW{}                -> NotInScope_
@@ -4399,6 +4409,14 @@ data TypeError
         | ModuleArityMismatch A.ModuleName Telescope [NamedArg A.Expr]
         | GeneralizeCyclicDependency
         | GeneralizeUnsolvedMeta
+        | ReferencesFutureVariables Term (List1.NonEmpty Int) (Arg Term) Int
+          -- ^ The first term references the given list of variables,
+          -- which are in "the future" with respect to the given lock
+          -- (and its leftmost variable)
+        | DoesNotMentionTicks Term Type (Arg Term)
+          -- ^ Arguments: later term, its type, lock term. The lock term
+          -- does not mention any @lock variables.
+        | MismatchedProjectionsError QName QName
     -- Coverage errors
 -- UNUSED:        | IncompletePatternMatching Term [Elim] -- can only happen if coverage checking is switched off
         | SplitError SplitError
@@ -5313,6 +5331,7 @@ instance KillRange NLPSort where
   killRange s@(PInf f n) = s
   killRange PSizeUniv = PSizeUniv
   killRange PLockUniv = PLockUniv
+  killRange PLevelUniv = PLevelUniv
   killRange PIntervalUniv = PIntervalUniv
 
 instance KillRange RewriteRule where

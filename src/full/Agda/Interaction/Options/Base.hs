@@ -9,6 +9,7 @@ module Agda.Interaction.Options.Base
     , Verbosity, VerboseKey, VerboseLevel
     , WarningMode(..)
     , ConfluenceCheck(..)
+    , PrintAgdaVersion(..)
     , UnicodeOrAscii(..)
     , checkOpts
     , parsePragmaOptions
@@ -125,7 +126,7 @@ data CommandLineOptions = Options
   , optTrustedExecutables    :: Map ExeName FilePath
   -- ^ Map names of trusted executables to absolute paths
   , optPrintAgdaDir          :: Bool
-  , optPrintVersion          :: Bool
+  , optPrintVersion          :: Maybe PrintAgdaVersion
   , optPrintHelp             :: Maybe Help
   , optInteractive           :: Bool
       -- ^ Agda REPL (-I).
@@ -159,6 +160,7 @@ data PragmaOptions = PragmaOptions
   , optVerbose                   :: !Verbosity
   , optProfiling                 :: ProfileOptions
   , optProp                      :: Bool
+  , optLevelUniv                 :: Bool
   , optTwoLevel                  :: WithDefault 'False
   , optAllowUnsolved             :: Bool
   , optAllowIncompleteMatch      :: Bool
@@ -266,6 +268,16 @@ data ConfluenceCheck
 
 instance NFData ConfluenceCheck
 
+-- | Options @--version@ and @--numeric-version@ (last wins).
+data PrintAgdaVersion
+  = PrintAgdaVersion
+      -- ^ Print Agda version information and exit.
+  | PrintAgdaNumericVersion
+      -- ^ Print Agda version number and exit.
+  deriving (Show, Generic)
+
+instance NFData PrintAgdaVersion
+
 -- | Map a function over the long options. Also removes the short options.
 --   Will be used to add the plugin name to the plugin options.
 mapFlag :: (String -> String) -> OptDescr a -> OptDescr a
@@ -287,7 +299,7 @@ defaultOptions = Options
   , optTraceImports          = 1
   , optTrustedExecutables    = Map.empty
   , optPrintAgdaDir          = False
-  , optPrintVersion          = False
+  , optPrintVersion          = Nothing
   , optPrintHelp             = Nothing
   , optInteractive           = False
   , optGHCiInteraction       = False
@@ -311,6 +323,7 @@ defaultPragmaOptions = PragmaOptions
   , optVerbose                   = Strict.Nothing
   , optProfiling                 = noProfileOptions
   , optProp                      = False
+  , optLevelUniv                 = False
   , optTwoLevel                  = Default
   , optExperimentalIrrelevance   = False
   , optIrrelevantProjections     = False -- off by default in > 2.5.4, see issue #2170
@@ -560,6 +573,7 @@ infectiveCoinfectiveOptions =
   , coinfectiveOption (not . optUniversePolymorphism)
                       "--no-universe-polymorphism"
   , coinfectiveOption (not . optCumulativity) "--no-cumulativity"
+  , coinfectiveOption optLevelUniv "--level-universe"
   , infectiveOption (isJust . optCubical) "--cubical/--erased-cubical"
   , infectiveOption optGuarded "--guarded"
   , infectiveOption optProp "--prop"
@@ -604,7 +618,10 @@ printAgdaDirFlag :: Flag CommandLineOptions
 printAgdaDirFlag o = return $ o { optPrintAgdaDir = True }
 
 versionFlag :: Flag CommandLineOptions
-versionFlag o = return $ o { optPrintVersion = True }
+versionFlag o = return $ o { optPrintVersion = Just PrintAgdaVersion }
+
+numericVersionFlag :: Flag CommandLineOptions
+numericVersionFlag o = return $ o { optPrintVersion = Just PrintAgdaNumericVersion }
 
 helpFlag :: Maybe String -> Flag CommandLineOptions
 helpFlag Nothing    o = return $ o { optPrintHelp = Just GeneralHelp }
@@ -652,6 +669,9 @@ propFlag o = return $ o { optProp = True }
 
 noPropFlag :: Flag PragmaOptions
 noPropFlag o = return $ o { optProp = False }
+
+levelUniverseFlag :: Flag PragmaOptions
+levelUniverseFlag o = return $ o { optLevelUniv = True }
 
 twoLevelFlag :: Flag PragmaOptions
 twoLevelFlag o = return $ o { optTwoLevel = Value True }
@@ -1033,6 +1053,9 @@ keepCoveringClausesFlag o = return $ o { optKeepCoveringClauses = True }
 standardOptions :: [OptDescr (Flag CommandLineOptions)]
 standardOptions =
     [ Option ['V']  ["version"] (NoArg versionFlag)
+                    ("print version information and exit")
+
+    , Option []     ["numeric-version"] (NoArg numericVersionFlag)
                     ("print version number and exit")
 
     , Option ['?']  ["help"]    (OptArg helpFlag "TOPIC") $ concat
@@ -1136,6 +1159,8 @@ pragmaOptions =
                     "enable the use of the Prop universe"
     , Option []     ["no-prop"] (NoArg noPropFlag)
                     "disable the use of the Prop universe (default)"
+    , Option []     ["level-universe"] (NoArg levelUniverseFlag)
+                    "place type Level in a dedicated LevelUniv universe"
     , Option []     ["two-level"] (NoArg twoLevelFlag)
                     "enable the use of SSet* universes"
     , Option []     ["sized-types"] (NoArg sizedTypes)
