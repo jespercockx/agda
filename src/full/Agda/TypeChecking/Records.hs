@@ -4,6 +4,7 @@ module Agda.TypeChecking.Records where
 
 import Prelude hiding (null)
 
+import Control.Arrow ((***))
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
@@ -38,6 +39,7 @@ import {-# SOURCE #-} Agda.TypeChecking.Primitive.Cubical.Base (isCubicalSubtype
 
 import {-# SOURCE #-} Agda.TypeChecking.ProjectionLike (eligibleForProjectionLike)
 
+import Agda.Utils.Applicative ( (?$>) )
 import Agda.Utils.Either
 import Agda.Utils.Empty
 import Agda.Utils.Function (applyWhen)
@@ -759,6 +761,22 @@ etaExpandAtRecordType t u = do
   (tel, con, ci, args) <- etaExpandRecord_ r pars def u
   return (tel, mkCon con ci args)
 
+etaExpandOnce' :: PureTCM m => Type -> Term -> m (Maybe Term)
+etaExpandOnce' ty v = reduce ty >>= \case
+  ty@(El _ (Pi a b)) -> do
+    reportSDoc "tc.eta" 20 $ "Eta expanding" <+> prettyTCM v <+> "at type" <+> prettyTCM ty
+    return $ Just $
+      Lam ai $ mkAbs (absName b) $ raise 1 v `apply` [ Arg ai $ var 0 ]
+      where ai = domInfo a
+
+  ty -> isEtaRecordType ty >>= \case
+    Just (r, pars) -> do
+      reportSDoc "tc.eta" 20 $ "Eta expanding" <+> prettyTCM v <+> "at type" <+> prettyTCM ty
+      def <- theDef <$> getConstInfo r
+      (_, con, ci, args) <- etaExpandRecord_ r pars def v
+      return $ Just $ mkCon con ci args
+    Nothing -> return Nothing
+
 -- | The fields should be eta contracted already.
 --
 --   We can eta contract if all fields @f = ...@ are irrelevant
@@ -817,31 +835,36 @@ etaContractRecord r c ci args = if all (not . usableModality) args then fallBack
         , unDom ax == f -> Just $ Just $ h es
       _                 -> Nothing
 
--- | Is the type a hereditarily singleton record type? May return a
--- blocking metavariable.
---
--- Precondition: The name should refer to a record type, and the
--- arguments should be the parameters to the type.
+-- | Is the type a hereditarily singleton record type?
+--   Returns the unique (closed) inhabitant if exists.
+--   Precondition: The name should refer to a record type, and the
+--   arguments should be the parameters to the type.
+--   May throw @patternViolation@ in case the check is blocked on a metavariable.
 isSingletonRecord :: (PureTCM m, MonadBlock m) => QName -> Args -> m Bool
-isSingletonRecord r ps = isJust <$> isSingletonRecord' False r ps mempty
+isSingletonRecord r ps =
+  isJust <$> runMaybeT (runWriterT $ isSingletonRecord' [] r ps mempty)
 
-isSingletonRecordModuloRelevance :: (PureTCM m, MonadBlock m)
-                                 => QName -> Args -> m Bool
-isSingletonRecordModuloRelevance r ps = isJust <$> isSingletonRecord' True r ps mempty
+-- | Like @isSingletonRecord, but ignores irrelevant fields.
+isSingletonRecordModuloRelevance :: (PureTCM m, MonadBlock m) => QName -> Args -> m Bool
+isSingletonRecordModuloRelevance r ps =
+  isJust <$> runMaybeT (runWriterT $ isSingletonRecord' [erasedModality, irrelevantModality] r ps mempty)
 
--- | Return the unique (closed) inhabitant if exists.
---   In case of counting irrelevance in, the returned inhabitant
---   contains dummy terms.
 isSingletonRecord'
-  :: forall m. (PureTCM m, MonadBlock m)
-  => Bool            -- ^ Should disregard irrelevant fields?
+  :: forall m. (PureTCM m, MonadBlock m, MonadWriter (Maybe (UnderAddition Modality)) m, MonadPlus m)
+  => [Modality]      -- ^ Fields that are usable under any of these modalities are regarded as singletons
   -> QName           -- ^ Name of record type to check.
   -> Args            -- ^ Parameters given to the record type.
   -> Set QName       -- ^ Non-terminating record types we already encountered.
                      --   These are considered as non-singletons,
                      --   otherwise we would construct an infinite inhabitant (in an infinite time...).
-  -> m (Maybe Term)  -- ^ The unique inhabitant, if any.  May contain dummy terms in irrelevant positions.
-isSingletonRecord' regardIrrelevance r ps rs = do
+  -> m (Term -> Term)-- ^ Returns @mzero@ if not a singleton record.
+                     --   Otherwise, it returns a function @g@ that computes the unique inhabitant.
+                     --   If the @MonadWriter@ output is @Nothing@, then @g@ is a constant function
+                     --   and can be safely fed a dummy term.
+                     --   If the @MonadWriter@ output is @Just mod@, then @g@ contains projections
+                     --   of its input term @u@ that are usable under modality @mod@, where @mod@
+                     --   is below one of the modalities in the given list.
+isSingletonRecord' singletonModalities r ps rs = do
   reportSDoc "tc.meta.eta" 30 $ vcat
     [ "Is" <+> prettyTCM (Def r $ map Apply ps) <+> "a singleton record type?"
     , "  already visited:" <+> hsep (map prettyTCM $ Set.toList rs)
@@ -849,76 +872,126 @@ isSingletonRecord' regardIrrelevance r ps rs = do
   -- Andreas, 2022-03-10, issue #5823
   -- We need to make sure we are not infinitely unfolding records, so we only expand each once,
   -- and keep track of the recursive ones we have already seen.
-  if r `Set.member` rs then no else do
-    caseMaybeM (isRecord r) no $ \ def -> do
-      -- We might not know yet whether a record type is recursive because the positivity checker hasn't run yet.
-      -- In this case, we pessimistically consider the record type to be recursive (@True@).
-      let recursive = maybe True (not . null) $ recMutual def
-      -- Andreas, 2022-03-23, issue #5823
-      -- We may pass through terminating record types as often as we want.
-      -- If the termination checker has not run yet, we pessimistically consider the record type
-      -- to be non-terminating.
-      let nonTerminating = maybe True not $ recTerminates def
-      reportSDoc "tc.meta.eta" 30 $ vcat
-        [ hsep [ prettyTCM r, "is recursive      :", prettyTCM recursive      ]
-        , hsep [ prettyTCM r, "is non-terminating:", prettyTCM nonTerminating ]
-        ]
-      fmap (mkCon (recConHead def) ConOSystem) <$> do
-        check (applyWhen (recursive && nonTerminating) (Set.insert r) rs) $ recTel def `apply` ps
+  guard $ not $ r `Set.member` rs
+  def <- scatterMP $ isRecord r
+  -- We might not know yet whether a record type is recursive because the positivity checker hasn't run yet.
+  -- In this case, we pessimistically consider the record type to be recursive (@True@).
+  let recursive = maybe True (not . null) $ recMutual def
+  -- Andreas, 2022-03-23, issue #5823
+  -- We may pass through terminating record types as often as we want.
+  -- If the termination checker has not run yet, we pessimistically consider the record type
+  -- to be non-terminating.
+  let nonTerminating = maybe True not $ recTerminates def
+  reportSDoc "tc.meta.eta" 30 $ vcat
+    [ hsep [ prettyTCM r, "is recursive      :", prettyTCM recursive      ]
+    , hsep [ prettyTCM r, "is non-terminating:", prettyTCM nonTerminating ]
+    ]
+  let rs' = applyWhen (recursive && nonTerminating) (Set.insert r) rs
+  let fs :: [Term -> Term]
+      fs = map (\f v -> v `applyE` [Proj ProjSystem $ unDom f]) $ recFields def
+  (gs , mmod) <- listen $ check rs' (recTel def `apply` ps)
+  -- For each field of the record, we first project the field (using the projection from fs)
+  -- and then recursively eta-expand the result (using the expansion function from gs).
+  let g = \v -> mkCon (recConHead def) ConOSystem $ map ($ v) $ zipWith (.) gs fs
+  reportSDoc "tc.meta.eta" 30 $
+    "isSingletonRecord' result:" <+> prettyTCM (Lam defaultArgInfo $ Abs "z" $ g $ var 0)
+  -- We need to check that the sum of the modalities is still ok,
+  -- e.g. if one field is irrelevant and the other is erased we should fail.
+  -- Doing this here means a bit of repeated work but it allows us to fail sooner
+  -- so it probably saves us work overall.
+  whenJust mmod $ modalityOk . underAddition
+  return g
+
   where
+  -- We can ignore a field if it is below at least one of the given modalities
+  modalityOk :: Modality -> m ()
+  modalityOk mod = guard $ any (`moreUsableModality` mod) singletonModalities
+
+  useModality :: Modality -> m ()
+  useModality mod = do
+    modalityOk mod
+    tell $ Just $ UnderAddition mod
+
   -- Check that all entries of the constructor telescope are singletons.
-  check :: Set QName -> Telescope -> m (Maybe [Arg Term])
+  check :: Set QName -> Telescope -> m [Term -> Arg Term]
   check rs tel = do
     reportSDoc "tc.meta.eta" 30 $
       "isSingletonRecord' checking telescope " <+> prettyTCM tel
     case tel of
-      EmptyTel -> yes
-      ExtendTel dom tel -> ifM (return regardIrrelevance `and2M` isIrrelevantOrPropM dom)
-        {-then-}
-          (underAbstraction dom tel $ fmap (fmap (Arg (domInfo dom) __DUMMY_TERM__ :)) . check rs)
-        {-else-} $ do
-          caseMaybeM (isSingletonType' regardIrrelevance (unDom dom) rs) no $ \ v -> do
-            underAbstraction dom tel $ fmap (fmap (Arg (domInfo dom) v :)) . check rs
-  no  = return Nothing
-  yes = return $ Just []
+      EmptyTel -> return []
+      (ExtendTel dom tel) -> do
+        isPropField <- isPropM dom
+        let fmod = applyWhen isPropField (setRelevance Irrelevant) $ getModality dom
+        underAbstraction dom tel $ \tel' -> do
+          let -- There are two ways in which this could be a singleton field:
+              -- 1. Its type is a singleton type. We do this first because eta-expansion
+              --    could get us a stronger modality (e.g. the term could disappear completely).
+              fieldTypeIsSingleton =
+                censor (fmap $ fmap $ composeModality fmod) $
+                isSingletonType' singletonModalities (unDom dom) rs
+              -- 2. Its modality is one of the modalities that we consider to be singleton.
+              modalityIsSingleton = useModality fmod $> id
+          g <- fieldTypeIsSingleton <|> modalityIsSingleton
+          ((Arg (domInfo dom) . g):) <$> check rs tel'
 
--- | Check whether a type has a unique inhabitant and return it.
+-- | Check whether a type has a unique inhabitant.
 --   Can be blocked by a metavar.
-isSingletonType :: (PureTCM m, MonadBlock m) => Type -> m (Maybe Term)
-isSingletonType t = isSingletonType' False t mempty
+isSingletonType :: (PureTCM m, MonadBlock m) => Type -> m Bool
+isSingletonType t =
+  isJust <$> runMaybeT (runWriterT $ isSingletonType' [] t mempty)
 
 -- | Check whether a type has a unique inhabitant (irrelevant parts ignored).
 --   Can be blocked by a metavar.
 isSingletonTypeModuloRelevance :: (PureTCM m, MonadBlock m) => Type -> m Bool
-isSingletonTypeModuloRelevance t = isJust <$> isSingletonType' True t mempty
+isSingletonTypeModuloRelevance t =
+  isJust <$> runMaybeT (runWriterT $ isSingletonType' [irrelevantModality] t mempty)
+
+-- | Check whether the given type @t@ is fully erased:
+--   * Returns @Just (Left v)@ if @t@ is a singleton type with unique inhabitant @v@.
+--   * Returns @Just (Right (g , mod))@ if @t@ is a singleton type up to fields of modality @mod@.
+--     In this case @g : mod t -> t@ is a definitional identity function that performs the
+--     required eta-expansions.
+--   * Returns @Nothing@ otherwise.
+isFullyErasedType :: (PureTCM m, MonadBlock m) => Type -> m (Maybe (Either Term (Term -> Term, Modality)))
+isFullyErasedType t = do
+  r <- runMaybeT $ runWriterT $ isSingletonType' [erasedModality, irrelevantModality] t mempty
+  case r of
+    Nothing                             -> return Nothing
+    Just (g , Nothing)                  -> return $ Just $ Left $ g __DUMMY_TERM__
+    Just (g , Just (UnderAddition mod)) -> return $ Just $ Right (g , mod)
 
 isSingletonType'
-  :: forall m. (PureTCM m, MonadBlock m)
-  => Bool            -- ^ Should disregard irrelevant fields?
+  :: forall m. (PureTCM m, MonadBlock m, MonadWriter (Maybe (UnderAddition Modality)) m, MonadPlus m)
+  => [Modality]      -- ^ Fields that are usable under any of these modalities are regarded as singletons
   -> Type            -- ^ Type to check.
   -> Set QName       -- ^ Non-terminating record typess we already encountered.
                      --   These are considered as non-singletons,
                      --   otherwise we would construct an infinite inhabitant (in an infinite time...).
-  -> m (Maybe Term)  -- ^ The unique inhabitant, if any.  May contain dummy terms in irrelevant positions.
-isSingletonType' regardIrrelevance t rs = do
+  -> m (Term -> Term)-- ^ See comment for @isSingletonRecord'@.
+isSingletonType' singletonModalities t rs = do
     TelV tel t <- telView t
-    t <- abortIfBlocked t
-    addContext tel $ do
+    -- @expandWithTel@ lifts a (meta-)function @g : t -> t@ to
+    -- a function @expandWithTel g : (tel -> t) -> (tel -> t)@
+    let expandWithTel :: (Term -> Term) -> Term -> Term
+        expandWithTel g v =
+          abstract tel $ g $ raise (size tel) v `apply` teleArgs tel
+    addContext tel $ fmap expandWithTel $ do
+      t <- abortIfBlocked t
       let
         -- Easy case: η for records.
-        record :: m (Maybe Term)
-        record = runMaybeT $ do
-          (r, ps, def) <- MaybeT $ isRecordType t
+        record :: m (Term -> Term)
+        record = do
+          (r, ps, def) <- scatterMP $ isRecordType t
           guard (YesEta == recEtaEquality def)
-          abstract tel <$> MaybeT (isSingletonRecord' regardIrrelevance r ps rs)
+          isSingletonRecord' singletonModalities r ps rs
 
         -- Slightly harder case: η for Sub {level} tA phi elt.
         -- tA : Type level, phi : I, elt : Partial phi tA.
-        subtype :: m (Maybe Term)
-        subtype = runMaybeT $ do
-          (level, tA, phi, elt) <- MaybeT $ isCubicalSubtype t
-          subin <- MaybeT $ getBuiltinName' builtinSubIn
-          itIsOne <- MaybeT $ getBuiltinName' builtinIsOne
+        subtype :: m (Term -> Term)
+        subtype = do
+          (level, tA, phi, elt) <- scatterMP $ isCubicalSubtype t
+          subin <- scatterMP $ getBuiltinName' builtinSubIn
+          itIsOne <- scatterMP $ getBuiltinName' builtinIsOne
           phiV <- intervalView phi
           case phiV of
             -- If phi = i1, then inS (elt 1=1) is the only inhabitant.
@@ -926,14 +999,14 @@ isSingletonType' regardIrrelevance t rs = do
               let
                 argH = Arg $ setHiding Hidden defaultArgInfo
                 it = elt `apply` [defaultArg (Def itIsOne [])]
-              pure (Def subin [] `apply` [argH level, argH tA, argH phi, defaultArg it])
+              pure $ const $ Def subin [] `apply` [argH level, argH tA, argH phi, defaultArg it]
             -- Otherwise we're blocked
             OTerm phi' -> patternViolation (unblockOnAnyMetaIn phi')
             -- This fails the MaybeT: we're not looking at a
             -- definitional singleton.
             _ -> fail ""
 
-      (<|>) <$> record <*> subtype
+      record <|> subtype
 
 -- | Checks whether the given term (of the given type) is beta-eta-equivalent
 --   to a variable. Returns just the de Bruijn-index of the variable if it is,
@@ -946,37 +1019,40 @@ isEtaVar u a = runMaybeT $ isEtaVarG u a Nothing []
     -- then i and i' are also required to be equal (else Nothing is returned).
     isEtaVarG :: Term -> Type -> Maybe Int -> [Elim' Int] -> MaybeT m Int
     isEtaVarG u a mi es = do
-      (u, a) <- reduce (u, a)
+      u <- reduce u
       reportSDoc "tc.lhs" 80 $ "isEtaVarG" <+> nest 2 (vcat
         [ "u  = " <+> prettyTCM u
         , "a  = " <+> prettyTCM a
         , "mi = " <+> text (show mi)
         , "es = " <+> prettyList_ (map (prettyTCM . fmap var) es)
         ])
-      case (u, unEl a) of
-        (Var i' es', _) -> do
+      case stripDontCare u of
+        (Var i' es') -> do
           guard $ mi == (i' <$ mi)
           b <- typeOfBV i'
           areEtaVarElims (var i') b es' es
           return i'
-        (_, Def d pars) -> do
-          guard =<< do isEtaRecord d
-          fs <- map unDom . recFields . theDef <$> getConstInfo d
-          is <- forM fs $ \f -> do
-            let o = ProjSystem
-            (_, _, fa) <- MaybeT $ projectTyped u a o f
-            isEtaVarG (u `applyE` [Proj o f]) fa mi (es ++ [Proj o f])
-          case (mi, is) of
-            (Just i, _)     -> return i
-            (Nothing, [])   -> mzero
-            (Nothing, i:is) -> guard (all (==i) is) >> return i
-        (_, Pi dom cod) -> addContext dom $ do
-          let u'  = raise 1 u `apply` [argFromDom dom $> var 0]
-              a'  = absBody cod
-              mi' = fmap (+1) mi
-              es' = (fmap . fmap) (+1) es ++ [Apply $ argFromDom dom $> 0]
-          (-1+) <$> isEtaVarG u' a' mi' es'
-        _ -> mzero
+        _ -> do
+          a <- reduce a
+          case unEl a of
+            (Def d pars) -> do
+              guard =<< do isEtaRecord d
+              fs <- map unDom . recFields . theDef <$> getConstInfo d
+              is <- forM fs $ \f -> do
+                let o = ProjSystem
+                (_, _, fa) <- MaybeT $ projectTyped u a o f
+                isEtaVarG (u `applyE` [Proj o f]) fa mi (es ++ [Proj o f])
+              case (mi, is) of
+                (Just i, _)     -> return i
+                (Nothing, [])   -> mzero
+                (Nothing, i:is) -> guard (all (==i) is) >> return i
+            (Pi dom cod) -> addContext dom $ do
+              let u'  = raise 1 u `apply` [argFromDom dom $> var 0]
+                  a'  = absBody cod
+                  mi' = fmap (+1) mi
+                  es' = (fmap . fmap) (+1) es ++ [Apply $ argFromDom dom $> 0]
+              (-1+) <$> isEtaVarG u' a' mi' es'
+            _ -> mzero
 
     -- `areEtaVarElims u a es es'` checks whether the given elims es (as applied
     -- to the term u of type a) are beta-eta-equal to either projections or
@@ -1003,6 +1079,7 @@ isEtaVar u a = runMaybeT $ isEtaVarG u a Nothing []
     areEtaVarElims u a (IApply{} : _) (IApply{} : _) = __IMPOSSIBLE__ -- TODO Andrea: not actually impossible, should be done like Apply
     areEtaVarElims u a (Apply v : es) (Apply i : es') = do
       ifNotPiType a (const mzero) $ \dom cod -> do
+      guard $ getModality dom `moreUsableModality` getModality i
       _ <- isEtaVarG (unArg v) (unDom dom) (Just $ unArg i) []
       areEtaVarElims (u `apply` [fmap var i]) (cod `absApp` var (unArg i)) es es'
 
