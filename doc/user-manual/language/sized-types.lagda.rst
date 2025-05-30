@@ -179,7 +179,7 @@ language to have size ``∞``.
 ::
 
       _∈_ : ∀ {A} → List A → Lang ∞ A → Bool
-      []      ∈ a = ν a
+      []      ∈ a = ν {i = ∞} a
       (x ∷ w) ∈ a = w ∈ δ a x
 
 Intuitively, ``∞`` is a ``Size`` larger than the size of any term
@@ -202,6 +202,7 @@ length alternating letters “true” and “false”.
 
 ::
 
+    bip-bop : ∀ {i} → Lang i Bool
     bip-bop = (⟦ true ⟧ · ⟦ false ⟧)*
 
 
@@ -212,14 +213,23 @@ Let's test a few words for membership in the language ``bip-bop``!
     open SizedMembership
 
 ::
+    _∈∞_ = _∈_ {i = ∞}
 
-    test₁ : (true ∷ false ∷ true ∷ false ∷ true ∷ false ∷ []) ∈ bip-bop ≡ true
+    []∞ : {A : Set} → List ∞ A
+    []∞ = [] {i = ∞}
+
+    _∷∞_ : {A : Set} {j : Size< ∞} → A → List j A → List ∞ A
+    _∷∞_ = _∷_ {i = ∞}
+
+    infixr 7 _∷∞_
+
+    test₁ : ∀ {i} → (true ∷ false ∷ true ∷ false ∷ true ∷ false ∷ ([] {i})) ∈ bip-bop ≡ true
     test₁ = refl
 
-    test₂ : (true ∷ false ∷ true ∷ false ∷ true ∷ []) ∈ bip-bop ≡ false
+    test₂ : ∀ {i} → (true ∷ false ∷ true ∷ false ∷ true ∷ ([] {i})) ∈ bip-bop ≡ false
     test₂ = refl
 
-    test₃ : (true ∷ true ∷ false ∷ []) ∈ bip-bop ≡ false
+    test₃ : ∀ {i} → (true ∷ true ∷ false ∷ ([] {i})) ∈ bip-bop ≡ false
     test₃ = refl
 
 .. _`Brzozowski derivative`: https://en.wikipedia.org/wiki/Brzozowski_derivative

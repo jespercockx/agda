@@ -179,7 +179,7 @@ checkAlias t ai i name e mc =
 
   reportSDoc "tc.def.alias" 20 $ "checkAlias: finished checking"
 
-  solveSizeConstraints DontDefaultToInfty
+  solveSizeConstraints
 
   v <- instantiateFull v  -- if we omit this, we loop (stdlib: Relation.Binary.Sum)
     -- or the termination checker might stumble over levels in sorts
@@ -285,7 +285,7 @@ checkFunDefS t ai extlam with i name withSubAndLets cs = do
               -- 2014-04-24: The size solver requires each clause to be
               -- checked individually, since otherwise we get constraints
               -- in typing contexts which are not prefixes of each other.
-              whenNothing extlam $ solveSizeConstraints DontDefaultToInfty
+              whenNothing extlam $ solveSizeConstraints
               -- Andreas, 2013-10-27 add clause as soon it is type-checked
               -- TODO: instantiateFull?
               inTopContext $ addClauses name [c]
@@ -897,7 +897,7 @@ checkRHS i x aps t lhsResult@(LHSResult _ delta ps absurdPat trhs _ _asb _ _) rh
     -- Andreas, 2016-01-23, Issue #1796
     -- Run the size constraint solver to improve with-abstraction
     -- in case the with-expression contains size metas.
-    solveSizeConstraints DefaultToInfty
+    solveSizeConstraints
 
     checkWithRHS x aux t lhsResult vtys cs
 
@@ -947,7 +947,7 @@ checkRHS i x aps t lhsResult@(LHSResult _ delta ps absurdPat trhs _ _asb _ _) rh
       -- Andreas, 2016-04-14, see also Issue #1796
       -- Run the size constraint solver to improve with-abstraction
       -- in case the with-expression contains size metas.
-      solveSizeConstraints DefaultToInfty
+      solveSizeConstraints
 
       let rhs' = insertPatterns pats rhs
           (rhs'', outerWhere) -- the where clauses should go on the inner-most with
@@ -1001,7 +1001,7 @@ checkRHS i x aps t lhsResult@(LHSResult _ delta ps absurdPat trhs _ _asb _ _) rh
       -- Andreas, 2016-04-14, see also Issue #1796
       -- Run the size constraint solver to improve with-abstraction
       -- in case the with-expression contains size metas.
-      solveSizeConstraints DefaultToInfty
+      solveSizeConstraints
 
       -- Check that the type is actually an equality (lhs ≡ rhs)
       -- and extract lhs, rhs, and their type.

@@ -102,16 +102,10 @@ import qualified Agda.Utils.VarSet as VarSet
 
 import Agda.Utils.Impossible
 
--- | Flag to control the behavior of size solver.
-data DefaultToInfty
-  = DefaultToInfty      -- ^ Instantiate all unconstrained size variables to ∞.
-  | DontDefaultToInfty  -- ^ Leave unconstrained size variables unsolved.
-  deriving (Eq, Ord, Show)
-
 -- | Solve size constraints involving hypotheses.
 
-solveSizeConstraints :: DefaultToInfty -> TCM ()
-solveSizeConstraints flag =  do
+solveSizeConstraints :: TCM ()
+solveSizeConstraints =  do
 
   -- 1. Take out the size constraints normalised.
 
@@ -122,7 +116,7 @@ solveSizeConstraints flag =  do
 
   unless (null cs0) $
     reportSDoc "tc.size.solve" 40 $ vcat $
-      text ( "Solving constraints (" ++ show flag ++ ")" ) : map prettyTCM cs0
+      text ( "Solving constraints" ) : map prettyTCM cs0
 
   -- 2. Cluster the constraints by common size metas.
 
@@ -150,7 +144,7 @@ solveSizeConstraints flag =  do
 
   -- Solve the closed constraints, one by one.
 
-  forM_ clcs $ \ c -> () <$ solveSizeConstraints_ flag [c]
+  forM_ clcs $ \ c -> () <$ solveSizeConstraints_ [c]
 
   -- Solve the clusters.
 
@@ -175,28 +169,7 @@ solveSizeConstraints flag =  do
           ) : map (nest 2 . prettyTCM) cs'
 
         -- Solve the converted constraints.
-        solveSizeConstraints_ flag cs'
-
-  -- 4. Possibly set remaining metas to infinity.
-
-  -- Andreas, issue 1862: do not default to ∞ always, could be too early.
-  when (flag == DefaultToInfty) $ do
-
-    -- let constrainedMetas = Set.fromList $ concat $
-    --       for cs0 $ \ Closure{ clValue = ValueCmp _ _ u v } ->
-    --         allMetas u ++ allMetas v
-
-    -- Set the unconstrained, open size metas to ∞.
-    ms <- S.getSizeMetas False -- do not get interaction metas
-    unless (null ms) $ do
-      inf <- primSizeInf
-      forM_ ms $ \ (m, t, tel) -> do
-        unless (m `Set.member` constrainedMetas) $ do
-        unlessM (isFrozen m) $ do
-        reportSDoc "tc.size.solve" 20 $
-          "solution " <+> prettyTCM (MetaV m []) <+>
-          " := "      <+> prettyTCM inf
-        assignMeta 0 m t (List.downFrom $ size tel) inf
+        solveSizeConstraints_ cs'
 
   -- -- Double check.
   -- let -- Error for giving up
@@ -354,8 +327,8 @@ castConstraintToCurrentContext c = do
 -- | Return the size metas occurring in the simplified constraints.
 --   A constraint like @↑ _j =< ∞ : Size@ simplifies to nothing,
 --   so @_j@ would not be in this set.
-solveSizeConstraints_ :: DefaultToInfty -> [ProblemConstraint] -> TCM (Set MetaId)
-solveSizeConstraints_ flag cs0 = do
+solveSizeConstraints_ :: [ProblemConstraint] -> TCM (Set MetaId)
+solveSizeConstraints_ cs0 = do
   -- Pair constraints with their representation as size constraints.
   -- Discard constraints that do not have such a representation.
   ccs :: [(ProblemConstraint, HypSizeConstraint)] <- catMaybes <$> do
@@ -377,17 +350,17 @@ solveSizeConstraints_ flag cs0 = do
       css = cluster' csMs
 
   -- Check that the closed constraints are valid.
-  whenJust (nonEmpty csNoM) $ solveCluster flag
+  whenJust (nonEmpty csNoM) solveCluster
 
   -- Now, process the clusters.
-  forM_ css $ solveCluster flag
+  forM_ css solveCluster
 
   return $ Set.mapMonotonic sizeMetaId $ flexs $ map (snd . fst) csMs
 
 -- | Solve a cluster of constraints sharing some metas.
 --
-solveCluster :: DefaultToInfty -> List1 (ProblemConstraint, HypSizeConstraint) -> TCM ()
-solveCluster flag ccs = do
+solveCluster :: List1 (ProblemConstraint, HypSizeConstraint) -> TCM ()
+solveCluster ccs = do
   let
     err :: TCM Doc -> TCM a
     err mdoc = typeError . CannotSolveSizeConstraints ccs =<< mdoc
@@ -521,9 +494,6 @@ solveCluster flag ccs = do
     -- assignMeta' n m t (length xs) partialSubst u
     -- WRONG: assign DirEq m (map (defaultArg . var) xs) u
 
-  -- Possibly set remaining size metas to ∞ (issue 1862)
-  -- unless we have an interaction meta in the cluster (issue 2095).
-
   ims <- Set.fromList <$> getInteractionMetas
 
   --  ms = unsolved size metas from cluster
@@ -534,31 +504,8 @@ solveCluster flag ccs = do
   unless (null ms) $ reportSDoc "tc.size.solve" 30 $ fsep $
     "cluster did not solve these size metas: " : map prettyTCM (Set.toList ms)
 
-  solvedAll <- do
-    -- If no metas are left, we have solved this cluster completely.
-    if Set.null ms                then return True  else do
-    -- Otherwise, we can solve it completely if we are allowed to set to ∞.
-    if flag == DontDefaultToInfty then return False else do
-    -- Which is only the case when we have no interaction points in the cluster.
-    if not noIP                   then return False else do
-    -- Try to set all unconstrained size metas to ∞.
-    inf <- primSizeInf
-    and <$> do
-      forM (Set.toList ms) $ \ m -> do
-        -- If one variable is frozen, we cannot set it (and hence not all) to ∞
-        let no = do
-              reportSDoc "tc.size.solve" 30 $
-                prettyTCM (MetaV m []) <+> "is frozen, cannot set it to ∞"
-              return False
-        ifM (isFrozen m `or2M` do not <$> asksTC envAssignMetas) no $ {-else-} do
-          reportSDoc "tc.size.solve" 20 $
-            "solution " <+> prettyTCM (MetaV m []) <+>
-            " := "      <+> prettyTCM inf
-          t <- metaType m
-          TelV tel core <- telView t
-          unlessM (isJust <$> isSizeType core) __IMPOSSIBLE__
-          assignMeta 0 m t (List.downFrom $ size tel) inf
-          return True
+  -- If no metas are left, we have solved this cluster completely.
+  let solvedAll = Set.null ms
 
   -- Double check.
   when solvedAll $ do

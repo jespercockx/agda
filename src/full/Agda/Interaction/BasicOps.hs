@@ -165,7 +165,7 @@ giveExpr force mii mi e = do
       reportSDoc "interaction.give" 20 $ "give: meta variable updated!"
       unless (force == WithForce) $ redoChecks mii
       wakeupConstraints mi
-      solveSizeConstraints DontDefaultToInfty
+      solveSizeConstraints
       cubical <- isJust <$> cubicalOption
       -- don't double check with cubical, because it gets in the way too often.
       unless (cubical || force == WithForce) $ do

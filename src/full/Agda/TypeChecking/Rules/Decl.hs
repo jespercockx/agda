@@ -25,7 +25,6 @@ import qualified Agda.Syntax.Info as Info
 import Agda.Syntax.Position
 import Agda.Syntax.Common
 import Agda.Syntax.Common.Pretty (prettyShow)
-import Agda.Syntax.Concrete (pattern NoWhere_)
 import Agda.Syntax.Literal
 import Agda.Syntax.Scope.Base ( KindOfName(..) )
 
@@ -222,7 +221,7 @@ checkDecl d = setCurrentRange d $ do
           wakeupConstraints_   -- solve emptiness and instance constraints
 
         checkingWhere <- asksTC envCheckingWhere
-        solveSizeConstraints $ if checkingWhere /= NoWhere_ then DontDefaultToInfty else DefaultToInfty
+        solveSizeConstraints
         wakeupConstraints_   -- Size solver might have unblocked some constraints
 
         case d of
@@ -721,10 +720,8 @@ checkAxiom' gentel kind i info0 mp x e = whenAbstractFreezeMetasAfter i $ defaul
     NotInstanceDef -> pure ()
 
   traceCall (IsType_ e) $ do -- need Range for error message
-    -- Andreas, 2016-06-21, issue #2054
-    -- Do not default size metas to ∞ in local type signatures
     checkingWhere <- asksTC envCheckingWhere
-    solveSizeConstraints $ if checkingWhere /= NoWhere_ then DontDefaultToInfty else DefaultToInfty
+    solveSizeConstraints
 
 -- | Type check a primitive function declaration.
 checkPrimitive :: A.DefInfo -> QName -> Arg A.Expr -> TCM ()

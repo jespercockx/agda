@@ -249,9 +249,6 @@ trySizeUniv cmp t m n x els1 y els2 = do
   case (cmp, els1, els2) of
      -- Case @Size< _ <= Size@: true.
      (CmpLeq, [_], [])  | x == sizelt && y == size -> return ()
-     -- Case @Size< u = Size@: forces @u = ∞@.
-     (_, [Apply u], []) | x == sizelt && y == size -> forceInfty u
-     (_, [], [Apply u]) | x == size && y == sizelt -> forceInfty u
      -- This covers all cases for SIZE and SIZELT.
      -- The remaining case is for @x@ and @y@ which are not size built-ins.
      _                                             -> failure

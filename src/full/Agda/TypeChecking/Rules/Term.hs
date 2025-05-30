@@ -827,7 +827,7 @@ checkExtendedLambda cmp i di erased qname cs e t = do
     -- Andreas, 2016-06-16 issue #2045
     -- Try to get rid of unsolved size metas before we
     -- fix the type of the extended lambda auxiliary function
-    solveSizeConstraints DontDefaultToInfty
+    solveSizeConstraints
     lamMod <- inFreshModuleIfFreeParams currentModule  -- #2883: need a fresh module if refined params
     t <- instantiateFull t
     ifBlocked t (\ m t' -> postponeTypeCheckingProblem_ $ CheckExpr cmp e t') \ _ t -> do
