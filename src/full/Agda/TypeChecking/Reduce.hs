@@ -453,11 +453,9 @@ instance Reduce Sort where
         Inf _ _    -> done
         SizeUniv   -> done
         LockUniv   -> done
-        LevelUniv  -> do
-          levelUniverseEnabled <- isLevelUniverseEnabled
-          if levelUniverseEnabled
-          then done
-          else return $ notBlocked (mkType 0)
+        LevelUniv  -> ifM isLevelUniverseEnabled
+          {-then-} done
+          {-else-} (return $ notBlocked $ mkType 0)
         IntervalUniv -> done
         MetaS x es -> done
         DefS d es  -> done -- postulated sorts do not reduce

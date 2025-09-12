@@ -11,6 +11,7 @@ import qualified Data.Map as Map
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
 
+import Agda.TypeChecking.Level
 import Agda.TypeChecking.Monad.Base
 import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Monad.Context
@@ -153,8 +154,8 @@ sSizeUniv = SizeUniv
 tSizeUniv :: Applicative m => m Type
 tSizeUniv = pure $ sort sSizeUniv
 
-tLevelUniv :: Applicative m => m Type
-tLevelUniv = pure $ sort $ LevelUniv
+tLevelUniv :: HasOptions m => m Type
+tLevelUniv = sort <$> levelUniv
 
 -- | Abbreviation: @argN = 'Arg' 'defaultArgInfo'@.
 argN :: e -> Arg e

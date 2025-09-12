@@ -1,0 +1,9 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Issue248.agda:13.1-13: error: [UnequalSorts]
+out > Agda.Primitive.Setω != Set₁
+out > when checking that the type (x : ⊥) → ⊥ → (l : Level) → Set of the
+out > generated with function is well-formed
+out > (https://agda.readthedocs.io/en/v2.9.0/language/with-abstraction.html#ill-typed-with-abstractions)
+out >

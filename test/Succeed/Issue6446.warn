@@ -1,0 +1,8 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Issue6446.agda:14.1-24: error: [NotLeqSort]
+out > Setω is not less or equal than Set
+out > when checking that the clause R P p = ∀ x → type (p x) has type
+out > {T : Set} (P : T → Set) → ((x : T) → P x) → Set
+out >

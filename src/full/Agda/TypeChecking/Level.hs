@@ -15,7 +15,7 @@ import Agda.TypeChecking.Reduce
 
 import Agda.Utils.List1 ( List1, pattern (:|) )
 import Agda.Utils.Maybe ( caseMaybeM, allJustM )
-import Agda.Utils.Monad ( tryMaybe )
+import Agda.Utils.Monad ( ifM, tryMaybe )
 import Agda.Utils.Singleton
 
 import Agda.Utils.Impossible
@@ -31,11 +31,16 @@ data LevelKit = LevelKit
   , zeroName :: QName
   }
 
+{-# SPECIALIZE levelUniv :: TCM Sort #-}
+levelUniv :: HasOptions m => m Sort
+levelUniv = ifM isLevelUniverseEnabled (return LevelUniv) (return $ mkType 0)
+
 {-# SPECIALIZE levelType :: TCM Type #-}
 -- | Get the 'primLevel' as a 'Type'.  Aborts if any of the level BUILTINs is undefined.
-levelType :: (HasBuiltins m, MonadTCError m) => m Type
-levelType =
-  El LevelUniv . lvlType <$> requireLevels
+levelType :: (HasBuiltins m, HasOptions m, MonadTCError m) => m Type
+levelType = do
+  lu <- levelUniv
+  El lu . lvlType <$> requireLevels
   -- Andreas, 2022-10-11, issue #6168
   -- It seems superfluous to require all level builtins here,
   -- but since we are in MonadTCError here, this is our chance to make sure
@@ -45,9 +50,10 @@ levelType =
 
 {-# SPECIALIZE levelType' :: TCM Type #-}
 -- | Get the 'primLevel' as a 'Type'.  Unsafe, crashes if the BUILTIN LEVEL is undefined.
-levelType' :: (HasBuiltins m) => m Type
-levelType' =
-  El LevelUniv . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
+levelType' :: (HasBuiltins m, HasOptions m) => m Type
+levelType' = do
+  lu <- levelUniv
+  El lu . fromMaybe __IMPOSSIBLE__ <$> getBuiltin' builtinLevel
 
 {-# SPECIALIZE isLevelType :: Type -> TCM Bool #-}
 isLevelType :: PureTCM m => Type -> m Bool

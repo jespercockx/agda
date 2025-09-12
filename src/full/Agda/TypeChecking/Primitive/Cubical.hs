@@ -33,6 +33,7 @@ import Agda.TypeChecking.Primitive.Base
 import Agda.TypeChecking.Monad
 
 import Agda.TypeChecking.Free
+import Agda.TypeChecking.Level
 import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Reduce
@@ -58,7 +59,7 @@ primPOr :: TCM PrimitiveImpl
 primPOr = do
   requireCubical CErased
   t    <- runNamesT [] $
-          hPi' "a" (els (pure LevelUniv) (cl primLevel))    $ \ a  ->
+          hPi' "a" (els (cl levelUniv) (cl primLevel))    $ \ a  ->
           nPi' "i" primIntervalType $ \ i  ->
           nPi' "j" primIntervalType $ \ j  ->
           hPi' "A" (pPi' "o" (imax i j) $ \o -> el' (cl primLevelSuc <@> a) (Sort . tmSort <$> a)) $ \ bA ->
@@ -88,7 +89,7 @@ primPartial' :: TCM PrimitiveImpl
 primPartial' = do
   requireCubical CErased
   t <- runNamesT [] $
-       hPi' "a" (els (pure LevelUniv) (cl primLevel)) (\ a ->
+       hPi' "a" (els (cl levelUniv) (cl primLevel)) (\ a ->
         nPi' "φ" primIntervalType $ \ _ ->
         nPi' "A" (sort . tmSort <$> a) $ \ bA ->
         (sort . tmSSort <$> a))
@@ -104,7 +105,7 @@ primPartialP' :: TCM PrimitiveImpl
 primPartialP' = do
   requireCubical CErased
   t <- runNamesT [] $
-       hPi' "a" (els (pure LevelUniv) (cl primLevel)) (\ a ->
+       hPi' "a" (els (cl levelUniv) (cl primLevel)) (\ a ->
         nPi' "φ" primIntervalType $ \ phi ->
         nPi' "A" (pPi' "o" phi $ \ _ -> el' (cl primLevelSuc <@> a) (Sort . tmSort <$> a)) $ \ bA ->
         (sort . tmSSort <$> a))
@@ -119,7 +120,7 @@ primSubOut' :: TCM PrimitiveImpl
 primSubOut' = do
   requireCubical CErased
   t    <- runNamesT [] $
-          hPi' "a" (els (pure LevelUniv) (cl primLevel)) $ \ a ->
+          hPi' "a" (els (cl levelUniv) (cl primLevel)) $ \ a ->
           hPi' "A" (el' (cl primLevelSuc <@> a) (Sort . tmSort <$> a)) $ \ bA ->
           hPi' "φ" primIntervalType $ \ phi ->
           hPi' "u" (el's a $ cl primPartial <#> a <@> phi <@> bA) $ \ u ->
@@ -143,7 +144,7 @@ primTrans' :: TCM PrimitiveImpl
 primTrans' = do
   requireCubical CErased
   t    <- runNamesT [] $
-          hPi' "a" (primIntervalType --> els (pure LevelUniv) (cl primLevel)) $ \ a ->
+          hPi' "a" (primIntervalType --> els (cl levelUniv) (cl primLevel)) $ \ a ->
           nPi' "A" (nPi' "i" primIntervalType $ \ i -> (sort . tmSort <$> (a <@> i))) $ \ bA ->
           nPi' "φ" primIntervalType $ \ phi ->
           (el' (a <@> cl primIZero) (bA <@> cl primIZero) --> el' (a <@> cl primIOne) (bA <@> cl primIOne))
@@ -154,7 +155,7 @@ primHComp' :: TCM PrimitiveImpl
 primHComp' = do
   requireCubical CErased
   t    <- runNamesT [] $
-          hPi' "a" (els (pure LevelUniv) (cl primLevel)) $ \ a ->
+          hPi' "a" (els (cl levelUniv) (cl primLevel)) $ \ a ->
           hPi' "A" (sort . tmSort <$> a) $ \ bA ->
           hPi' "φ" primIntervalType $ \ phi ->
           nPi' "i" primIntervalType (\ i -> pPi' "o" phi $ \ _ -> el' a bA) -->
@@ -748,7 +749,7 @@ primComp :: TCM PrimitiveImpl
 primComp = do
   requireCubical CErased
   t    <- runNamesT [] $
-          hPi' "a" (primIntervalType --> els (pure LevelUniv) (cl primLevel)) $ \ a ->
+          hPi' "a" (primIntervalType --> els (cl levelUniv) (cl primLevel)) $ \ a ->
           nPi' "A" (nPi' "i" primIntervalType $ \ i -> (sort . tmSort <$> (a <@> i))) $ \ bA ->
           hPi' "φ" primIntervalType $ \ phi ->
           nPi' "i" primIntervalType (\ i -> pPi' "o" phi $ \ _ -> el' (a <@> i) (bA <@> i)) -->

@@ -1,0 +1,10 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Issue4203.agda:17.3-20.17: error: [UnequalSorts]
+out > Setω != Set₂
+out > when checking that the type
+out > (ℓ : Level) → Level → (a : Level) → Set₁ of the generated with
+out > function is well-formed
+out > (https://agda.readthedocs.io/en/v2.9.0/language/with-abstraction.html#ill-typed-with-abstractions)
+out >

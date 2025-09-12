@@ -1,0 +1,10 @@
+AGDA_UNEXPECTED_FAIL
+
+ret > ExitFailure 42
+out > Issue2223c.agda:14.5-17.19: error: [NotLeqSort]
+out > Setω is not less or equal than Set₂
+out > when checking that the type
+out > (ℓ' : Level) → Level → (a ℓ : Level) → Set₁ of the generated with
+out > function is well-formed
+out > (https://agda.readthedocs.io/en/v2.9.0/language/with-abstraction.html#ill-typed-with-abstractions)
+out >
