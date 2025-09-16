@@ -117,17 +117,17 @@ isType_ e = traceCall (IsType_ e) $ do
     A.Fun i (Arg info t) b -> do
       a <- setArgInfo info . defaultDom <$> checkPiDomain (info :| []) t
       b <- isType_ b
-      s <- inferFunSort a (getSort b)
+      s <- inferFunSort a b
       let t' = El s $ Pi a $ NoAbs underscore b
-      checkTelePiSort t'
+      hasPTSRule a (NoAbs underscore $ getSort b)
       --noFunctionsIntoSize t'
       return t'
     A.Pi _ tel e -> do
       (t0, t') <- checkPiTelescope (List1.toList tel) $ \ tel -> do
         t0  <- instantiateFull =<< isType_ e
         tel <- instantiateFull tel
+        checkTelePiSort tel (getSort t0)
         return (t0, telePi tel t0)
-      checkTelePiSort t'
       --noFunctionsIntoSize t'
       return t'
 
