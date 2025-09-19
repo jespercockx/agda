@@ -1552,6 +1552,15 @@ instance (Subst a, Ord a) => Ord (Elim' a) where
   Proj{}   `compare` _        = LT
   _        `compare` Proj{}   = GT
 
+deriving instance Eq NLPat
+deriving instance Eq NLPType
+deriving instance Eq NLPSort
+deriving instance Eq LocalRewriteRule
+
+deriving instance Ord NLPSort
+deriving instance Ord NLPType
+deriving instance Ord NLPat
+deriving instance Ord LocalRewriteRule
 
 ---------------------------------------------------------------------------
 -- * Sort stuff
