@@ -1242,11 +1242,11 @@ instance (Subst a, Subst b, SubstArg a ~ SubstArg b) => Subst (Dom' a b) where
 
   {-# INLINE applySubst #-}
   applySubst IdS dom = dom
-  applySubst rho (Dom' inf@(DomInfo i n f t rw) e) =
+  applySubst rho (Dom' inf@(DomInfo i n f d t rw) e) =
     let i' | getFreeVariables i == unknownFreeVariables = i
            | otherwise = setFreeVariables unknownFreeVariables i in
     let inf' | Nothing <- t, Nothing <- rw = inf
-             | otherwise = DomInfo i' n f (applySubst rho t) (applySubst rho rw) in
+             | otherwise = DomInfo i' n f d (applySubst rho t) (applySubst rho rw) in
     Dom' inf' $$! applySubst rho e
     -- Dom i' n f $$! applySubst rho t $$! applySubst rho rw $$! applySubst rho e
 
@@ -1903,28 +1903,37 @@ funSortM a b = do
 -- Note that unlike funSort', we don't care whether --level-universe is
 -- enabled here. Instead, we just return a FunSort constructor and
 -- assume it will be simplified in the next step. See also:
--- * `instance Reduce Sort` in Agda.TypeChecking.Substitute (this file)
+-- * `instance Reduce Sort` in Agda.TypeChecking.Reduce
 -- * `inferPiSort` in Agda.TypeChecking.Sort
 piSort' :: Dom Term -> Sort -> Abs Sort -> Either Blocker Sort
-piSort' a s1       (NoAbs _ s2) = Right $ FunSort s1 s2
-piSort' a s1 s2Abs@(Abs   _ s2) = case flexRigOccurrenceIn 0 s2 of
+piSort' a s1 s2Abs
+  | not (isLevelDep a) = case reAbs s2Abs of
+      NoAbs _ s2 -> Right $ FunSort s1 s2
+      Abs{}      -> Left neverUnblock -- TODO: __IMPOSSIBLE__?
+  | otherwise = FunSort s1 <$> makeLarge (unAbs s2Abs)
+  where
+    makeLarge :: Sort -> Either Blocker Sort
+    makeLarge = \case
+      (Univ u _)   -> Right $ Inf u 0
+      s@Inf{}      -> Right s
+      SizeUniv     -> Left neverUnblock -- TODO: impossible?
+      LevelUniv    -> Left neverUnblock -- TODO: impossible?
+      LockUniv     -> Left neverUnblock -- TODO: impossible?
+      IntervalUniv -> Left neverUnblock -- TODO: impossible?
+      PiSort{}     -> Left neverUnblock
+      FunSort{}    -> Left neverUnblock
+      UnivSort{}   -> Left neverUnblock
+      (MetaS m _)  -> Left $ unblockOnMeta m
+      DefS{}       -> Left neverUnblock
+      DummyS{}     -> Left neverUnblock
+{-
+case flexRigOccurrenceIn 0 s2 of
   Nothing -> Right $ FunSort s1 $ noabsApp __IMPOSSIBLE__ s2Abs
   Just o  -> piSortAbs a s1 s2Abs o CodomainNotNormalised
+-}
 
-data IsCodomainNormalised = CodomainNormalised | CodomainNotNormalised
 
--- | Compute the sort of a pi type where the codomain sort is a proper Abs.
---   Compared to piSort' we take two additional arguments:
---   4. The occurrence of the variable in the codomain.
---   5. Whether we have already tried to remove the dependency by
---      normalising the codomain sort (e.g. with forceNoAbs)
-piSortAbs
-  :: Dom Term
-  -> Sort
-  -> Abs Sort
-  -> FlexRig
-  -> IsCodomainNormalised
-  -> Either Blocker Sort
+{-
 piSortAbs a s1 NoAbs{} _ _ = __IMPOSSIBLE__
 piSortAbs a s1 (Abs x s2) occ norm = case (sizeOfSort s1 , sizeOfSort s2) of
   (Right (SmallSort u1) , Right (SmallSort u2)) -> case occ of
@@ -1943,6 +1952,8 @@ piSortAbs a s1 (Abs x s2) occ norm = case (sizeOfSort s1 , sizeOfSort s2) of
   (Left blocker  , Right _          ) -> Left blocker
   (Right _       , Left blocker     ) -> Left blocker
   (Left blocker1 , Left blocker2    ) -> Left $! unblockOnBoth blocker1 blocker2
+-}
+
 
 -- Andreas, 2019-06-20
 -- KEEP the following commented out code for the sake of the discussion on irrelevance.

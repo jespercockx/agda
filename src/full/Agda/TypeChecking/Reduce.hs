@@ -284,7 +284,7 @@ instance Instantiate Sort where
     s -> return s
 
 instance Instantiate e => Instantiate (Dom e) where
-    instantiate' (Dom i n b tac rew x) = Dom i n b <$> instantiate' tac <*> instantiate' rew <*> instantiate' x
+    instantiate' (Dom i n b d tac rew x) = Dom i n b d <$> instantiate' tac <*> instantiate' rew <*> instantiate' x
 
 instance Instantiate a => Instantiate (Closure a) where
     instantiate' cl = do
@@ -448,6 +448,7 @@ class Reduce t where
 
 instance Reduce Type where
     reduce'  (El s t) = workOnTypes $ El s <$> reduce' t
+    reduceB' :: Type -> ReduceM (Blocked Type)
     reduceB' (El s t) = workOnTypes $ fmap (El s) <$> reduceB' t
 
 instance Reduce Sort where
@@ -457,31 +458,16 @@ instance Reduce Sort where
       let done | MetaS x _ <- s = return $ blocked x s
                | otherwise      = return $ notBlocked s
       case s of
-        PiSort a s1 s2Abs -> reduceB' (s1 , s2Abs) >>= \case
-          -- If either the domain or codomain sort is blocked, there is no point
-          -- in doing the free variable check since even if we manage to reduce
-          -- to a FunSort, it would still be blocked. And normalizing anyway in
-          -- this case leads to exponential behavior (see #8423).
-          Blocked b (s1 , s2Abs) -> return $! blockedOn b $ PiSort a s1 s2Abs
-          NotBlocked _ (s1 , s2Abs) -> do
-            -- In theory we should just call piSort' here. However, we also want
-            -- to reduce the codomain sort to make it non-dependent when
-            -- possible. So we use forceNoAbs and in case we are dealing with a
-            -- proper Abs we call piSortAbs directly.
-            let dom = El s1 <$> a
-            forceNoAbsSort dom s2Abs >>= \case
-              -- If the codomain sort is non-dependent, we reduce to a FunSort
-              Right s2 -> reduceB' $ FunSort s1 s2
-              -- For a (possibly) properly dependent PiSort, we call piSortAbs.
-              Left (s2Abs, flexRig) -> do
-                let blockOcc = flexRigToBlocker flexRig
-                case piSortAbs a s1 s2Abs flexRig CodomainNormalised of
-                  -- We already know the sorts themselves are not blocked,
-                  -- so the only possible blocker comes from the free variable check
-                  Left _ -> return $! blockedOn blockOcc $ PiSort a s1 s2Abs
-                  -- The only sort that piSortAbs can reduce is Inf,
-                  -- so there is no need to try reducing it further.
-                  Right s -> return $! notBlocked s
+        PiSort a s1 s2Abs
+          | not (isLevelDep a) -> case s2Abs of
+              (NoAbs _ s2) -> reduceB' $ FunSort s1 s2
+              Abs{}        -> return $ Blocked neverUnblock s -- TODO: __IMPOSSIBLE__
+          | otherwise -> reduceB' s2Abs >>= \case
+              Blocked b s2Abs -> return $! blockedOn b $ PiSort a s1 s2Abs
+              NotBlocked _ s2Abs -> case piSort' a s1 s2Abs of
+                Left b -> return $ Blocked b $ PiSort a s1 s2Abs
+                Right s@FunSort{} -> reduceB' s
+                Right _ -> __IMPOSSIBLE__
         FunSort s1 s2 -> reduceB' (s1 , s2) >>= \case
           Blocked b (s1',s2') -> return $ Blocked b $ FunSort s1' s2'
           NotBlocked _ (s1',s2') -> funSortM' s1' s2' >>= \case
@@ -1664,8 +1650,8 @@ instance (Subst a, InstantiateFull a) => InstantiateFull (Abs a) where
 
 
 instance InstantiateFull e => InstantiateFull (Dom e) where
-    instantiateFull' (Dom i n b tac rew x) =
-      Dom i n b <$!> instantiateFull' tac <*!> instantiateFull' rew <*!> instantiateFull' x
+    instantiateFull' (Dom i n b d tac rew x) =
+      Dom i n b d <$!> instantiateFull' tac <*!> instantiateFull' rew <*!> instantiateFull' x
 
 instance InstantiateFull Context where
   instantiateFull' (Context es) = Context <$!> instantiateFull' es

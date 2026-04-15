@@ -42,6 +42,7 @@ data Attribute
   | PolarityAttribute PolarityModality
   | LockAttribute      Lock
   | RewriteAttribute RewriteAnn
+  | LevelDepAttribute LevelDepAnn
   deriving (Show)
 
 instance HasRange Attribute where
@@ -53,6 +54,7 @@ instance HasRange Attribute where
     TacticAttribute e    -> getRange e
     LockAttribute _l     -> NoRange
     RewriteAttribute _r  -> NoRange
+    LevelDepAttribute r  -> getRange r
 
 instance SetRange Attribute where
   setRange r = \case
@@ -62,7 +64,8 @@ instance SetRange Attribute where
     PolarityAttribute p  -> PolarityAttribute  $ setRange r p
     TacticAttribute e    -> TacticAttribute e  -- -- $ setRange r e -- SetRange Expr not yet implemented
     LockAttribute l      -> LockAttribute l
-    RewriteAttribute r   -> RewriteAttribute r
+    RewriteAttribute a   -> RewriteAttribute $ setRange r a
+    LevelDepAttribute a  -> LevelDepAttribute $ setRange r a
 
 instance KillRange Attribute where
   killRange = \case
@@ -72,7 +75,8 @@ instance KillRange Attribute where
     PolarityAttribute p  -> PolarityAttribute  $ killRange p
     TacticAttribute e    -> TacticAttribute    $ killRange e
     LockAttribute l      -> LockAttribute l
-    RewriteAttribute r   -> RewriteAttribute r
+    RewriteAttribute a   -> RewriteAttribute $ killRange a
+    LevelDepAttribute a  -> LevelDepAttribute $ killRange a
 
 -- | Parsed attribute.
 
@@ -93,7 +97,15 @@ instance KillRange Attr where
 
 -- | (Conjunctive constraint.)
 
-type LensAttribute a = (LensRelevance a, LensQuantity a, LensCohesion a, LensModalPolarity a, LensLock a, LensRewriteAnn a)
+type LensAttribute a =
+  ( LensRelevance a
+  , LensQuantity a
+  , LensCohesion a
+  , LensModalPolarity a
+  , LensLock a
+  , LensRewriteAnn a
+  , LensLevelDepAnn a
+  )
 
 -- | Modifiers for 'Relevance'.
 
@@ -205,6 +217,7 @@ setAttribute = \case
   PolarityAttribute  p -> setModalPolarity p
   LockAttribute      l -> setLock      l
   RewriteAttribute   r -> setRewriteAnn r
+  LevelDepAttribute  a -> setLevelDepAnn a
   TacticAttribute _    -> id
 
 
@@ -261,6 +274,13 @@ setPristineRewriteAnn q a
   | getRewriteAnn a == defaultRewrite = Just $ setRewriteAnn q a
   | otherwise = Nothing
 
+-- | Setting 'RewriteAnn' if unset.
+
+setPristineLevelDepAnn :: (LensLevelDepAnn a) => LevelDepAnn -> a -> Maybe a
+setPristineLevelDepAnn q a
+  | getLevelDepAnn a == defaultLevelDep = Just $ setLevelDepAnn q a
+  | otherwise = Nothing
+
 -- | Setting an unset attribute (to e.g. an 'Arg').
 
 setPristineAttribute :: (LensAttribute a) => Attribute -> a -> Maybe a
@@ -271,6 +291,7 @@ setPristineAttribute = \case
   PolarityAttribute  p -> setPristinePolarity  p
   LockAttribute      l -> setPristineLock      l
   RewriteAttribute   r -> setPristineRewriteAnn r
+  LevelDepAttribute  a -> setPristineLevelDepAnn a
   TacticAttribute{}    -> Just
 
 -- | Setting a list of unset attributes.

@@ -69,7 +69,7 @@ import Agda.Syntax.TopLevelModuleName
 import qualified Agda.TypeChecking.Monad.Base.Warning as W
 import Agda.TypeChecking.Monad.Base hiding (ModuleInfo, MetaInfo)
 import Agda.TypeChecking.Monad.Builtin
-import Agda.TypeChecking.Monad.Options (isTwoLevelEnabled, isPropEnabled)
+import Agda.TypeChecking.Monad.Options (isTwoLevelEnabled, isPropEnabled, hasUniversePolymorphism)
 import Agda.TypeChecking.Monad.Trace (traceCall, setCurrentRange)
 import Agda.TypeChecking.Monad.State hiding (topLevelModuleName)
 import qualified Agda.TypeChecking.Monad.State as TCM (topLevelModuleName)
@@ -4121,6 +4121,10 @@ checkAttributes (Attr r s attr : attrs) =
     RewriteAttribute rew -> do
       when (isRewrite rew) $ unlessM localRewritingOption $
         setCurrentRange r $ typeError $ AttributeKindNotEnabled "Rewrite" "--local-rewriting" s
+      cont
+    LevelDepAttribute ldep -> do
+      when (isLevelDep ldep) $ unlessM hasUniversePolymorphism $
+        setCurrentRange r $ typeError $ AttributeKindNotEnabled "Level dependency" "--universe-polymorphism" s
       cont
     QuantityAttribute Quantityω{} -> cont
     QuantityAttribute Quantity1{} -> __IMPOSSIBLE__

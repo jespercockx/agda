@@ -88,7 +88,7 @@ instance NamesIn a => NamesIn (Open a)
 instance NamesIn a => NamesIn (C.FieldAssignment' a)
 
 instance (NamesIn a, NamesIn b) => NamesIn (Dom' a b) where
-  namesAndMetasIn' sg (Dom _ _ _ t r e) =
+  namesAndMetasIn' sg (Dom _ _ _ _ t r e) =
     namesAndMetasIn' sg (t, r, e)
 
 -- Specific collections

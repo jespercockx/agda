@@ -321,6 +321,7 @@ onlyErased as = do
     CA.TacticAttribute{} -> unsup "Tactic"
     PolarityAttribute{}  -> unsup "Polarity"
     QuantityAttribute q  -> maybe (unsup "Linearity") (return . Just) $ erasedFromQuantity q
+    LevelDepAttribute{}  -> unsup "Level dependency"
     where
     unsup s = do
       parseWarning $ UnsupportedAttribute (attrRange a) (Just s)
@@ -553,15 +554,18 @@ patternSynArgs = mapM \ x -> do
         case ai of
 
           -- Benign case:
-          ArgInfo h (Modality Relevant{} (Quantityω _) Continuous (PolarityModality { modPolarityAnn = MixedPolarity })) UserWritten UnknownFVs (Annotation IsNotLock IsNotRewrite) ->
+          ArgInfo h (Modality Relevant{} (Quantityω _) Continuous (PolarityModality { modPolarityAnn = MixedPolarity })) UserWritten UnknownFVs (Annotation IsNotLock IsNotRewrite IsNotLevelDep) ->
             return $ WithHiding h n
 
           -- Error cases:
-          ArgInfo _ _ _ _ (Annotation (IsLock _) _) ->
+          ArgInfo _ _ _ _ (Annotation (IsLock _) _ _) ->
             abort $ noAnn "Lock"
 
-          ArgInfo _ _ _ _ (Annotation _ (IsRewrite _)) ->
+          ArgInfo _ _ _ _ (Annotation _ (IsRewrite _) _) ->
             abort $ noAnn "Rewrite"
+
+          ArgInfo _ _ _ _ (Annotation _ _ (IsLevelDep _)) ->
+            abort $ noAnn "Level dependency"
 
           ArgInfo _ (Modality r q c p) _ _ _
             | not (isRelevant r) ->

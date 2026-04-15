@@ -1803,6 +1803,7 @@ data Annotation = Annotation
     -- ^ Fitch-style dependent right adjoints.
     --   See Modal Dependent Type Theory and Dependent Right Adjoints, arXiv:1804.05236.
   , annRewrite :: RewriteAnn
+  , annLevelDep :: LevelDepAnn
   } deriving (Eq, Ord, Show, Generic)
 
 instance HasRange Annotation where
@@ -1812,14 +1813,14 @@ instance KillRange Annotation where
   killRange = id
 
 defaultAnnotation :: Annotation
-defaultAnnotation = Annotation defaultLock defaultRewrite
+defaultAnnotation = Annotation defaultLock defaultRewrite defaultLevelDep
 
 instance Null Annotation where
   empty = defaultAnnotation
-  null (Annotation lock rew) = null lock && null rew
+  null (Annotation lock rew ldep) = null lock && null rew && null ldep
 
 instance NFData Annotation where
-  rnf (Annotation l r) = rnf (l, r)
+  rnf (Annotation l r d) = rnf (l, r, d)
 
 class LensAnnotation a where
 
@@ -1989,6 +1990,93 @@ ignoreRew warn info
 
 prettyRewriteAnn :: LensRewriteAnn a => a -> Doc -> Doc
 prettyRewriteAnn a = (pretty (getRewriteAnn a) <+>)
+
+---------------------------------------------------------------------------
+-- * Level-dependent function spaces
+---------------------------------------------------------------------------
+
+data LevelDepAnn
+  = IsNotLevelDep
+  | IsLevelDep Range
+  deriving (Show, Generic)
+
+defaultLevelDep :: LevelDepAnn
+defaultLevelDep = IsNotLevelDep
+
+instance HasRange LevelDepAnn where
+  getRange = \case
+    IsLevelDep r  -> r
+    IsNotLevelDep -> noRange
+
+instance SetRange LevelDepAnn where
+  setRange r = \case
+    IsLevelDep _  -> IsLevelDep r
+    IsNotLevelDep -> IsNotLevelDep
+
+instance KillRange LevelDepAnn where
+  killRange = setRange noRange
+
+instance Eq LevelDepAnn where
+  (==) = (==) `on` isLevelDep
+
+instance Ord LevelDepAnn where
+  compare = compare `on` isLevelDep
+
+instance Null LevelDepAnn where
+  empty = defaultLevelDep
+
+instance NFData LevelDepAnn where
+  rnf IsNotLevelDep  = ()
+  rnf (IsLevelDep _) = ()
+
+instance Pretty LevelDepAnn where
+  pretty = \case
+    (IsLevelDep _) -> "@leveldep"
+    IsNotLevelDep  -> empty
+
+class LensLevelDepAnn a where
+
+  getLevelDepAnn :: a -> LevelDepAnn
+
+  setLevelDepAnn :: LevelDepAnn -> a -> a
+
+  mapLevelDepAnn :: (LevelDepAnn -> LevelDepAnn) -> a -> a
+  mapLevelDepAnn f a = setLevelDepAnn (f $ getLevelDepAnn a) a
+
+  default getLevelDepAnn :: LensAnnotation a => a -> LevelDepAnn
+  getLevelDepAnn = annLevelDep . getAnnotation
+
+  default setLevelDepAnn :: LensAnnotation a => LevelDepAnn -> a -> a
+  setLevelDepAnn ldep = mapAnnotation $ \ann -> ann { annLevelDep = ldep }
+
+instance LensLevelDepAnn LevelDepAnn where
+  getLevelDepAnn = id
+  setLevelDepAnn = const
+  mapLevelDepAnn = id
+
+instance LensLevelDepAnn ArgInfo where
+  getLevelDepAnn = annLevelDep . argInfoAnnotation
+  setLevelDepAnn r info = info { argInfoAnnotation = (argInfoAnnotation info){ annLevelDep = r } }
+
+instance LensLevelDepAnn (Arg t) where
+  getLevelDepAnn = getLevelDepAnn . getArgInfo
+  setLevelDepAnn = mapArgInfo . setLevelDepAnn
+
+isLevelDep :: LensLevelDepAnn a => a -> Bool
+isLevelDep a = case getLevelDepAnn a of
+  IsLevelDep _  -> True
+  IsNotLevelDep -> False
+
+ignoreLevelDep :: Monad m => LensLevelDepAnn a => (LevelDepAnn  -> m ()) -> a -> m a
+ignoreLevelDep warn info
+  | isLevelDep info = do
+    warn $ getLevelDepAnn info
+    return $ setLevelDepAnn IsNotLevelDep info
+  | otherwise      = return info
+
+prettyLevelDepAnn :: LensLevelDepAnn a => a -> Doc -> Doc
+prettyLevelDepAnn a = (pretty (getLevelDepAnn a) <+>)
+
 
 ---------------------------------------------------------------------------
 -- * Cohesion

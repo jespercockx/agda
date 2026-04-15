@@ -380,9 +380,10 @@ instance EqualSy ArgInfo where
 
 -- | Ignore the tactic and rewrite.
 instance EqualSy a => EqualSy (Dom a) where
-  equalSy d@(Dom ai x f _tac _rew a) d'@(Dom ai' x' f' _tac' _rew' a') = and
+  equalSy d@(Dom ai x f l _tac _rew a) d'@(Dom ai' x' f' l' _tac' _rew' a') = and
     [ x == x'
     , f == f'
+    , l == l'
     , equalSy ai ai'
     , equalSy a a'
     ]

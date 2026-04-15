@@ -522,7 +522,7 @@ instance EmbPrj Relevance where
     _      -> malformed
 
 instance EmbPrj Annotation where
-  icod_ (Annotation l r) = icodeN' Annotation l r
+  icod_ (Annotation l r d) = icodeN' Annotation l r d
 
   value = valueN Annotation
 
@@ -542,6 +542,14 @@ instance EmbPrj RewriteAnn where
 
   value 0 = pure IsNotRewrite
   value 1 = pure $ IsRewrite noRange
+  value _ = malformed
+
+instance EmbPrj LevelDepAnn where
+  icod_ IsNotLevelDep  = pure 0
+  icod_ (IsLevelDep _) = pure 1
+
+  value 0 = pure IsNotLevelDep
+  value 1 = pure $ IsLevelDep noRange
   value _ = malformed
 
 instance EmbPrj Origin where

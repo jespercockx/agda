@@ -854,6 +854,7 @@ compareDom cmp0 dom1@(unDom -> a1) dom2@(unDom -> a2) b1 b2 err cont = do
      | not $ sameCohesion (getCohesion  dom1) (getCohesion  dom2) -> err
      | not $ samePolarity (getModalPolarity dom1) (getModalPolarity dom2) -> err
      | not $ domIsFinite dom1 == domIsFinite dom2 -> err
+     | not $ getLevelDepAnn dom1 == getLevelDepAnn dom2 -> err
      -- We compare both rewrite annotations AND the actual rewDoms to properly
      -- handle the case where we have use a rewrite annotation outside of a
      -- module telescope and continued trying to typecheck

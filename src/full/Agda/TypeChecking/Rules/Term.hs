@@ -43,6 +43,7 @@ import Agda.TypeChecking.Conversion
 import Agda.TypeChecking.Coverage.SplitTree
 import Agda.TypeChecking.Datatypes
 import Agda.TypeChecking.EtaContract
+import Agda.TypeChecking.Free
 import Agda.TypeChecking.Generalize
 import Agda.TypeChecking.Implicit
 import Agda.TypeChecking.InstanceArguments
@@ -88,6 +89,7 @@ import qualified Agda.Utils.Set1 as Set1
 import Agda.Utils.Singleton
 import Agda.Utils.Size
 import Agda.Utils.Tuple
+import qualified Agda.Utils.VarSet as VarSet
 
 import Agda.Utils.Impossible
 import Agda.Utils.Boolean (implies)
@@ -133,7 +135,17 @@ isType_ e = traceCall (IsType_ e) $ do
         t0  <- instantiateFull =<< isType_ e
         tel <- instantiateFull tel
         checkTelePiSort tel (getSort t0)
-        return (t0, telePi tel t0)
+        let varMap = freeVarMap (getSort t0)
+        let deps = for (downFrom $ size tel) $ \i ->
+              case lookupVarMap i varMap of
+                Nothing -> IsNotLevelDep
+                Just (VarOcc Flexible{} _) -> IsLevelDep empty -- TODO: prune
+                Just p -> IsLevelDep empty
+        let updateTel [] EmptyTel = EmptyTel
+            updateTel (d:ds) (ExtendTel a tel) =
+              ExtendTel (setLevelDepAnn d a) $ fmap (updateTel ds) tel
+            updateTel _ _ = __IMPOSSIBLE__
+        return (t0, telePi (updateTel deps tel) t0)
       --noFunctionsIntoSize t'
       return t'
 

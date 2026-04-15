@@ -76,6 +76,8 @@ data DomInfo t = DomInfo {
   -- ^ e.g. @x@ in @{x = y : A} -> B@.
   , domInfoIsFinite :: Bool
   -- ^ Is this a Π-type (False), or a partial type (True)?
+  , domInfoLevelDep :: Bool
+  -- ^ Is the universe level of the codomain dependent on this input?
   , domInfoTactic   :: (Maybe t)
   -- ^ "@tactic e".
   , domInfoRew      :: (Maybe (RewDom' t))
@@ -86,7 +88,7 @@ data DomInfo t = DomInfo {
   }
 
 instance Show t => Show (DomInfo t) where
-  show (DomInfo a b c d e) = show (a,b,c,d,e)
+  show (DomInfo a b c d e f) = show (a,b,c,d,e,f)
 
 {-# INLINE domInfo #-}
 domInfo :: Dom' t e -> ArgInfo
@@ -155,14 +157,14 @@ data Dom' t e = Dom'
   , unDom      :: e
   } deriving (Show, Foldable, Traversable)
 
-pattern Dom :: ArgInfo -> Maybe NamedName -> Bool -> Maybe t -> Maybe (RewDom' t) -> e -> Dom' t e
-pattern Dom a b c d e f = Dom' (DomInfo a b c d e) f
+pattern Dom :: ArgInfo -> Maybe NamedName -> Bool -> Bool -> Maybe t -> Maybe (RewDom' t) -> e -> Dom' t e
+pattern Dom a b c d e f z = Dom' (DomInfo a b c d e f) z
 {-# INLINE Dom #-}
 {-# COMPLETE Dom #-}
 
 instance Functor (Dom' t) where
   {-# INLINE fmap #-}
-  fmap fn = \(Dom a b c d e f) -> Dom a b c d e $! fn f
+  fmap fn = \(Dom a b c d e f z) -> Dom a b c d e f $! fn z
 
 type Dom = Dom' Term
 
@@ -179,7 +181,7 @@ invalidRew d = case rewDom d of
 
 
 instance Decoration (Dom' t) where
-  traverseF f (Dom ai x t b r a) = Dom ai x t b r <$> f a
+  traverseF f (Dom ai x t d b r a) = Dom ai x t d b r <$> f a
 
 instance HasRange a => HasRange (Dom' t a) where
   getRange = getRange . unDom
@@ -188,12 +190,12 @@ instance KillRange t => KillRange (RewDom' t) where
   killRange (RewDom eq rew) = killRangeN RewDom eq rew
 
 instance (KillRange t, KillRange a) => KillRange (Dom' t a) where
-  killRange (Dom info x t b r a) = killRangeN Dom info x t b r a
+  killRange (Dom info x t d b r a) = killRangeN Dom info x t d b r a
 
 -- | Ignores 'Origin' and 'FreeVariables' and tactic.
 instance Eq a => Eq (Dom' t a) where
-  Dom (ArgInfo h1 m1 _ _ a1) s1 f1 _ _ x1 == Dom (ArgInfo h2 m2 _ _ a2) s2 f2 _ _ x2 =
-    (h1, m1, a1, s1, f1, x1) == (h2, m2, a2, s2, f2, x2)
+  Dom (ArgInfo h1 m1 _ _ a1) s1 f1 d1 _ _ x1 == Dom (ArgInfo h2 m2 _ _ a2) s2 f2 d2 _ _ x2 =
+    (h1, m1, a1, s1, f1, d1, x1) == (h2, m2, a2, s2, f2, d2, x2)
 
 instance LensNamed (Dom' t e) where
   type NameOf (Dom' t e) = NamedName
@@ -223,6 +225,7 @@ instance LensModality      (Dom' t e) where
 instance LensOrigin        (Dom' t e) where
 instance LensFreeVariables (Dom' t e) where
 instance LensAnnotation    (Dom' t e) where
+instance LensLevelDepAnn   (Dom' t e) where
 
 -- Since we have LensModality, we get relevance and quantity by default
 
@@ -246,13 +249,13 @@ namedArgFromDom d =
 -- often for class AddContext.
 
 domFromArgRew :: Maybe RewDom -> Arg a -> Dom a
-domFromArgRew rew (Arg i a) = Dom i Nothing False Nothing rew a
+domFromArgRew rew (Arg i a) = Dom i Nothing False False Nothing rew a
 
 domFromArg :: Arg a -> Dom a
 domFromArg = domFromArgRew Nothing
 
 domFromNamedArg :: NamedArg a -> Dom a
-domFromNamedArg (Arg i a) = Dom i (nameOf a) False Nothing Nothing (namedThing a)
+domFromNamedArg (Arg i a) = Dom i (nameOf a) False False Nothing Nothing (namedThing a)
 
 defaultDom :: a -> Dom a
 defaultDom = defaultArgDom defaultArgInfo
@@ -1909,7 +1912,7 @@ instance NFData PlusLevel where
   rnf (Plus n l) = rnf (n, l)
 
 instance NFData e => NFData (Dom e) where
-  rnf (Dom a c d e f g) = rnf a `seq` rnf c `seq` rnf d `seq` rnf e `seq` rnf f `seq` rnf g
+  rnf (Dom a c d e f g h) = rnf a `seq` rnf c `seq` rnf d `seq` rnf e `seq` rnf f `seq` rnf g `seq` rnf h
 
 instance NFData a => NFData (DataOrRecord' a)
 instance NFData ConHead

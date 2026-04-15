@@ -11,6 +11,7 @@ import qualified Data.Map as Map
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
 
+import Agda.TypeChecking.Free
 import Agda.TypeChecking.Monad.Base
 import Agda.TypeChecking.Monad.Builtin
 import Agda.TypeChecking.Monad.Context
@@ -53,8 +54,10 @@ gpi info name a b = do
       dom = defaultNamedArgDom info name a
   b <- addContext (name, dom) b
   let y = stringToArgName name
+  let ldep | 0 `freeIn` getSort b = IsLevelDep mempty
+           | otherwise            = IsNotLevelDep
   return $ El (mkPiSort dom (Abs y b))
-              (Pi dom (Abs y b))
+              (Pi (setLevelDepAnn ldep dom) (Abs y b))
 
 hPi, nPi :: (MonadAddContext m, MonadDebug m)
          => String -> m Type -> m Type -> m Type
