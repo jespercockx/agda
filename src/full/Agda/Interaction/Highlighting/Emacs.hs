@@ -5,6 +5,7 @@
 module Agda.Interaction.Highlighting.Emacs
   ( HighlightingInfo
   , lispifyHighlightingInfo
+  , lispifyHighlightingInfoForFile
   , lispifyHighlightingInfo_
   , lispifyTokenBased
   ) where
@@ -89,6 +90,28 @@ lispifyHighlightingInfo
      -- ^ Must contain a mapping for every definition site's module.
   -> IO (Lisp String)
 lispifyHighlightingInfo h remove method modFile =
+  lispifyHighlightingInfo' h remove method modFile Nothing
+
+-- | As 'lispifyHighlightingInfo', but apply the annotations to the
+-- buffer visiting the given file instead of the current buffer.
+lispifyHighlightingInfoForFile
+  :: HighlightingInfo
+  -> RemoveTokenBasedHighlighting
+  -> HighlightingMethod
+  -> ModuleToSource
+  -> FilePath
+  -> IO (Lisp String)
+lispifyHighlightingInfoForFile h remove method modFile file =
+  lispifyHighlightingInfo' h remove method modFile (Just file)
+
+lispifyHighlightingInfo'
+  :: HighlightingInfo
+  -> RemoveTokenBasedHighlighting
+  -> HighlightingMethod
+  -> ModuleToSource
+  -> Maybe FilePath
+  -> IO (Lisp String)
+lispifyHighlightingInfo' h remove method modFile target =
   case chooseHighlightingMethod h method of
     Direct   -> direct
     Indirect -> indirect
@@ -101,13 +124,19 @@ lispifyHighlightingInfo h remove method modFile =
     lispifyHighlightingInfo_ modFile h
 
   direct :: IO (Lisp String)
-  direct = return $ L $
-    A "agda2-highlight-add-annotations" :
-    map Q info
+  direct = return $ L $ case target of
+    Nothing -> A "agda2-highlight-add-annotations" : map Q info
+    Just file -> A "agda2-highlight-add-annotations-to-file" :
+                   A (quote file) : map Q info
 
   indirect :: IO (Lisp String)
   indirect = do
     filepath <- writeToTempFile (prettyShow $ L info)
-    return $ L [ A "agda2-highlight-load-and-delete-action"
-               , A (quote filepath)
-               ]
+    return $ L $ case target of
+      Nothing -> [ A "agda2-highlight-load-and-delete-action"
+                 , A (quote filepath)
+                 ]
+      Just file -> [ A "agda2-highlight-load-and-delete-for-file"
+                   , A (quote filepath)
+                   , A (quote file)
+                   ]

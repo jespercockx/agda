@@ -73,6 +73,9 @@ lispifyResponse = \case
   Resp_HighlightingInfo info remove method modFile ->
     liftIO (lispifyHighlightingInfo info remove method modFile)
 
+  Resp_HighlightingInfoForFile info remove method modFile file ->
+    liftIO (lispifyHighlightingInfoForFile info remove method modFile file)
+
   Resp_DisplayInfo info ->
     lispifyDisplayInfo info
 

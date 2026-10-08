@@ -54,6 +54,12 @@ data Response_boot tcErr tcWarning warningsAndNonFatalErrors
         RemoveTokenBasedHighlighting
         HighlightingMethod
         ModuleToSource
+    | Resp_HighlightingInfoForFile
+        HighlightingInfo
+        RemoveTokenBasedHighlighting
+        HighlightingMethod
+        ModuleToSource
+        FilePath
     | Resp_Status Status
     | Resp_JumpToError FilePath Word32
     | Resp_InteractionPoints [InteractionId]

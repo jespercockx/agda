@@ -584,6 +584,15 @@ But only if `agda2-highlight-in-progress' is non-nil.  See
   (if agda2-highlight-in-progress
       (apply 'agda2-highlight-apply remove cmds)))
 
+(defun agda2-highlight-add-annotations-to-file (file remove &rest cmds)
+  "Apply highlighting CMDS to the open buffer visiting FILE."
+  (declare (agda2-command (string boolean &repeat list)))
+  (when agda2-highlight-in-progress
+    (let ((buffer (find-buffer-visiting file)))
+      (when buffer
+        (with-current-buffer buffer
+          (apply 'agda2-highlight-apply remove cmds))))))
+
 (defun agda2-highlight-load (file)
   "Load syntax highlighting information from FILE.
 
@@ -603,6 +612,19 @@ is non-nil."
   (unwind-protect
       (if agda2-highlight-in-progress
           (agda2-highlight-load file))
+    (delete-file file)))
+
+(defun agda2-highlight-load-and-delete-for-file (file target)
+  "Load highlighting from FILE and apply it to the open buffer TARGET."
+  (declare (agda2-command (string string)))
+  (unwind-protect
+      (when agda2-highlight-in-progress
+        (let* ((coding-system-for-read 'utf-8)
+               (cmds (with-temp-buffer
+                       (insert-file-contents file)
+                       (goto-char (point-min))
+                       (read (current-buffer)))))
+          (apply 'agda2-highlight-add-annotations-to-file target cmds)))
     (delete-file file)))
 
 (defun agda2-highlight-clear (&optional token-based)

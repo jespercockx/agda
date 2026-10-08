@@ -224,11 +224,16 @@ handleCommand wrap onFail cmd = handleNastyErrors $ wrap $ do
         unsolved <- lift $ computeUnsolvedInfo
         err     <- lift $ errorHighlighting e
         modFile <- lift $ useSession lensModuleToSource
+        let errorFile = case rangeFile (getRange e) of
+              Strict.Just rf -> Just $ filePath $ rangeFilePath rf
+              Strict.Nothing -> Nothing
         method  <- case method of
           Nothing -> lift $ viewTC eHighlightingMethod
           Just m  -> return m
-        let info = convert $ err <> unsolved
-                     -- Errors take precedence over unsolved things.
+        let errorInfo = convert err
+            unsolvedInfo = convert unsolved
+            info = errorInfo <> unsolvedInfo
+              -- Errors take precedence over unsolved things.
 
         showImpl <- lift $ optShowImplicit <$> useTC stPragmaOptions
         showIrr <- lift $ optShowIrrelevant <$> useTC stPragmaOptions
@@ -236,8 +241,15 @@ handleCommand wrap onFail cmd = handleNastyErrors $ wrap $ do
           mapM_ putResponse $
             [ Resp_DisplayInfo $ Info_Error $ Info_GenericError e ] ++
             tellEmacsToJumpToError (getRange e) ++
-            [ Resp_HighlightingInfo info KeepHighlighting
-                                    method modFile ] ++
+            (case errorFile of
+              Just file ->
+                [ Resp_HighlightingInfoForFile errorInfo KeepHighlighting
+                                               method modFile file
+                , Resp_HighlightingInfo unsolvedInfo KeepHighlighting
+                                        method modFile
+                ]
+              Nothing ->
+                [ Resp_HighlightingInfo info KeepHighlighting method modFile ]) ++
             [ Resp_Status $ Status { sChecked = False
                                    , sShowImplicitArguments = showImpl
                                    , sShowIrrelevantArguments = showIrr
