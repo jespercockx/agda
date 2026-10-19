@@ -512,22 +512,15 @@ cover infermissing f cs sc@(SClause tel ps _ _ target) = updateRelevance $ do
       -- The clause list ('cs') is not pruned as the checker recurses. Rather,
       -- the pattern list ('ps') is updated. Thus, to know whether all the
       -- clauses that remain blocked on a variable are absurd, we need to
-      -- partition 'cs' and then match according to 'ps'. We consider a match
-      -- on a variable to be absurd if at least one absurd clause consistent
-      -- with the current patterns is both blocking on it AND zero non-absurd
-      -- clauses consistent with the current patterns are blocking on it.
-      absurdBlockingVarNos <- do
-        let (absurdCs, nonAbsurdCs) = List.partition (isNothing . clauseBody) cs
-        absurdVars <- match absurdCs ps >>= \case
-          Block _ nvs -> return $ map blockingVarNo nvs
-          _           -> return []
-        nonAbsurdVars <- match nonAbsurdCs ps >>= \case
-          Block _ nvs -> return $ map blockingVarNo nvs
-          _           -> return []
-        return $ absurdVars List.\\ nonAbsurdVars
+      -- check that all clauses that match the current
+      -- split pattern list 'ps' are absurd.
+      let nonAbsurdCs = List.filter (isJust . clauseBody) cs
+      allAbsurd <- match nonAbsurdCs ps >>= \case
+        No{}    -> return True
+        Yes{}   -> return False
+        Block{} -> return False
       r <- altM1 (\ x ->
-        let inAbsurdClause = blockingVarNo x `elem` absurdBlockingVarNos
-        in  fmap (,x) <$> split Inductive allowPartialCover inAbsurdClause sc x
+        fmap (,x) <$> split Inductive allowPartialCover allAbsurd sc x
         ) xs
       case r of
         Left err -> handle err
